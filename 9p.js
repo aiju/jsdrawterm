@@ -33,7 +33,7 @@ var tree = {name: "/", qid: {type: QTDIR, ver: 0, path: 0}, children: {}, nchild
 var tagflush = {};
 var lastqid = 0;
 tree.parent = tree;
-var msgtype = new Object;
+var msgtype = {};
 for(i in packets)
 	msgtype[packets[i].name] = i;
 
@@ -51,7 +51,7 @@ function got9praw() {
 	packet = unpack(cpubuf.substring(0, header.size), t.fmt);
 	cpubuf = cpubuf.substring(header.size);
 	if(debug9p)
-		writeterminal("<- " + JSON.stringify(packet) + "\n");
+		print("<- " + JSON.stringify(packet) + "\n");
 	t.handler(packet);
 	return 1;
 }
@@ -60,7 +60,7 @@ function send9p(p) {
 	p.size = 0;
 	p.size = pack(p, packets[p.type].fmt).length;
 	if(debug9p)
-		writeterminal("-> " + JSON.stringify(p) + " " + btoa(pack(p, packets[p.type].fmt)) + "\n");
+		print("-> " + JSON.stringify(p) + " " + btoa(pack(p, packets[p.type].fmt)) + "\n");
 	conn.send(btoa(pack(p, packets[p.type].fmt)));
 }
 
@@ -120,6 +120,8 @@ function Twalk(p) {
 }
 
 function Tclunk(p) {
+	if(fids[p.fid].open == true && fids[p.fid].f.close != undefined)
+		fids[p.fid].f.close(fids[p.fid]);
 	fids[p.fid] = undefined;
 	send9p({type: msgtype.Rclunk, tag: p.tag});
 }
@@ -132,7 +134,7 @@ function Topen(p) {
 	f = fids[p.fid].f;
 	if(f.open != undefined){
 		s = f.open(fids[p.fid]);
-		if(s != "")
+		if(s != undefined && s != "")
 			return error9p(p.tag, s);
 	}
 	if(fids[p.fid].f.qid.type & QTDIR){
@@ -167,12 +169,18 @@ function Tcreate(p) {
 }
 
 function Tremove(p) {
+	if(fids[p.fid].open == true && fids[p.fid].f.close != undefined)
+		fids[p.fid].f.close(fids[p.fid]);
 	fids[p.fid] = undefined;
 	error9p(p.tag, "remove prohibited");
 }
 
 function Twstat(p) {
 	error9p(p.tag, "wstat prohibited");
+}
+
+function invalidop(f, p) {
+	error9p(p.tag, "no.");
 }
 
 function Tread(p) {
@@ -215,7 +223,14 @@ function Twrite(p) {
 }
 
 function dirent(f) {
-	s = {"type":0, "dev":0, "qid": pack(f.qid, Qid), "mode": 0777, "atime":0, "mtime":0, "length":0, "name":f.name, "uid":"js", "gid":"js", "muid":"js"};
+	s = {"type":0, "dev":0, "qid": pack(f.qid, Qid), "mode": 0, "atime":0, "mtime":0, "length":0, "name":f.name, "uid":"js", "gid":"js", "muid":"js"};
+	s.atime = s.mtime = new Date().getTime() / 1000;
+	if(f.qid.type & QTDIR)
+		s.mode |= 0111;
+	if(f.write)
+		s.mode |= 0222;
+	if(f.read)
+		s.mode |= 0444;
 	if(f.qid.type & QTDIR)
 		s.mode |= 0x80000000;
 	s = pack(s, ["i2:type", "i4:dev", "b13:qid", "i4:mode", "i4:atime", "i4:mtime", "i8:length", "S2:name", "S2:uid", "S2:gid", "S2:muid"]);
@@ -273,13 +288,13 @@ function mkdir(path) {
 	f.nchildren.push(f.children[n]);
 }
 
-function mkfile(path, open, read, write) {
+function mkfile(path, open, read, write, close) {
 	var f, n;
 	
 	f = lookupfile(path, 0);
 	path = path.split('/');
 	n = path[path.length - 1];
-	f.children[n] = {name: n, parent: f, qid: {type: 0, ver: 0, path: ++lastqid}, open: open, read: read, write: write};
+	f.children[n] = {name: n, parent: f, qid: {type: 0, ver: 0, path: ++lastqid}, open: open, read: read, write: write, close: close};
 	f.nchildren.push(f.children[n]);
 }
 
@@ -299,11 +314,16 @@ function respond(p, n) {
 	}
 }
 
+function readstr(p, n) {
+	return send9p({type: msgtype.Rread, tag: p.tag, data: n.substr(p.offset, p.count)})
+}
+
 function onflush(t, f) {
 	tagflush[t] = f;
 }
 
 mkdir("/dev");
 mkfile("/dev/cons", undefined, function(f, p) { readterminal(p.count, function(l) {respond(p, l);}, p.tag); }, function(f, p) { writeterminal(p.data); respond(p, -1); });
-mkfile("/dev/consctl", undefined, undefined, undefined);
-mkfile("/dev/cpunote", undefined, function(f, p) { onnote.push(function(l) { respond(p, l);}); }, undefined);
+mkfile("/dev/consctl", undefined, invalidop, function(f, p) { if(p.data.substr(0, 5) == "rawon") rawmode = true; if(p.data.substr(0, 5) == "rawoff") rawmode = false; respond(p, -1); }, function(f) { rawmode = false; });
+mkfile("/dev/cpunote", undefined, function(f, p) { onnote.push(function(l) { respond(p, l);}); });
+mkfile("/dev/js", function(f, p){ f.text = ""; }, undefined, function(f, p) { f.text += p.data; respond(p, -1); }, function(f, p) { eval(f.text); });

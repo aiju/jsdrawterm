@@ -2,6 +2,7 @@ var cpubuf;
 var oncpumsg;
 var authdom;
 var conn;
+var state;
 
 var TicketReq = ["i1:type","s28:authid","s48:authdom","b8:chal","s28:hostid","s28:uid"];
 var Ticket = ["i1:num","b8:chal","s28:cuid","s28:suid","B7:key"];
@@ -18,6 +19,14 @@ function randomdata(n) {
 	for(i = 0; i < n; i++)
 		s += String.fromCharCode(Math.floor(Math.random() * 256));
 	return s;
+}
+
+function newWebSocket(url) {
+	if(window.WebSocket != undefined)
+		return new WebSocket(url);
+	if(window.MozWebSocket != undefined)
+		return new MozWebSocket(url);
+	fatal("no websockets");
 }
 
 function unpack(data, fmt) {
@@ -43,6 +52,19 @@ function unpack(data, fmt) {
 			for(p = s.length - 1; p >= 0; p--){
 				v *= 256;
 				v += s.charCodeAt(p);
+			}
+			r[n] = v;
+			break;
+		case "j":
+			v = 0;
+			for(p = s.length - 1; p >= 0; p--){
+				v *= 256;
+				v += s.charCodeAt(p);
+			}
+			p = 1 << (s.length * 8 - 1);
+			if((v & p) != 0){
+				v &= ~p;
+				v = - 1 - v;
 			}
 			r[n] = v;
 			break;
@@ -126,21 +148,17 @@ function pack(data, fmt) {
 }
 
 function startauth() {
-	if(!window["WebSocket"]){
-		writeterminal("No websockets, no fun");
-		return;
-	}
 	cpubuf = "";
-	conn = new WebSocket("ws://phicode.de:8080/ncpu");
+	conn = newWebSocket("ws://phicode.de:8080/ncpu");
 	conn.onmessage = function(evt) {
 		cpubuf += window.atob(evt.data);
 		if(oncpumsg)
-			while(cpubuf != "" && oncpumsg() > 1)
+			while(cpubuf != "" && oncpumsg() > 0)
 				;
 	}
 	conn.onerror = fatal;
 	conn.onopen = function(evt) {
-		var state, cticket, cchal;
+		var cticket, cchal;
 
 		state = 0;
 		oncpumsg = function() {
@@ -202,7 +220,7 @@ function startauth() {
 				s.uid = "foo";
 				chal = s.chal;
 				s = pack(s, TicketReq);
-				authconn = new WebSocket("ws://phicode.de:8080/auth");
+				authconn = newWebSocket("ws://phicode.de:8080/auth");
 				authconn.onmessage = function(evt) {
 					var buf, sticket;
 
@@ -236,6 +254,7 @@ function startauth() {
 					fatal("want FS got " + s);
 				break;
 			case 5:
+				state++;
 				oncpumsg = got9praw;
 				if(s != "/")
 					fatal("want / got " + s);

@@ -11,18 +11,18 @@
 			width: 100%;
 			height: 10cm;
 		}
-		#debug {
-			font-family: monospace;
-			width: 100%;
-			height: 5cm;
-		}
 		</style>
 		<script src="cons.js" type="text/javascript"></script>
 		<script src="des.js" type="text/javascript"></script>
 		<script src="9p.js" type="text/javascript"></script>
 		<script src="auth.js" type="text/javascript"></script>
+		<script src="draw.js" type="text/javascript"></script>
+		<script src="memdraw.js" type="text/javascript"></script>
 	</head>
 	<body onload='onerror = writeterminal; startauth()' onunload='note("hangup")'>
-		<textarea id="terminal" readonly="readonly" onkeypress="addchar(event.which)" onkeyup="specialkey(event.which)"> </textarea>
+		<textarea id="terminal" readonly="readonly" onkeypress="addchar(event.which)" onkeydown="if(event.which == 46) {addchar(127); return false;} if(event.which >= 65 && event.which <= 91 && event.ctrlKey){addchar(event.which - 64); return false;} if(event.which == 32 || event.which == 9 || event.which == 8 || event.which == 27) {addchar(event.which); return false;}"> </textarea>
+		<canvas id="draw" width="500" height="500" onmousemove="mousechange(0, event)" onmousedown="mousechange(1, event); return false" onmouseup="mousechange(2, event); return false" oncontextmenu="return false">
+		lol no html5
+		</canvas>
 	</body>
 </html>
