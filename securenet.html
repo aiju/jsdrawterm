@@ -1,0 +1,39 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" 
+"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dli">
+<html>
+	<head>
+		<meta http-equiv="Content-type" content="text/html; charset=utf-8">
+		<title>securenet</title>
+		<script src="des.js" type="text/javascript"></script>
+		<script type="text/javascript">
+		function main() {
+			var key, chal, resp, tre, i, k;
+
+			key = passtokey(document.getElementById("pw").value);
+			chal = document.getElementById("chal").value;
+			chal = parseInt(chal, 10).toString();
+			while(chal.length < 8)
+				chal += "\0";
+			resp = encrypt(key, chal);
+			tre = "";
+			for(i = 0; i < 4; i++){
+				k = resp.charCodeAt(i);
+				if(k < 16) k = "0" + k.toString(16);
+				else k = k.toString(16);
+				tre += k;
+			}
+			document.getElementById("resp").firstChild.nodeValue = tre;
+		}
+		</script>
+	</head>
+	<body>
+		<form onsubmit="main(); return false">
+			<table border="0">
+			<tr><td>Password:</td><td><input id="pw" type="password" /></td></tr>
+			<tr><td>Challenge:</td><td><input id="chal" /></td></tr>
+			<tr><td><colspan="2"><input type="submit" /></td></tr>
+			<tr><td>Response:</td><td id="resp">&nbsp;</td></tr>
+			</table>
+		</form>
+	</body>
+</html>
