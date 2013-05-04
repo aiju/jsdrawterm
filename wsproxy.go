@@ -16,6 +16,8 @@ var ncpusrv = flag.String("c", "localhost:567", "auth server to proxy to")
 var listen = flag.String("l", ":8080", "websocket server bind address")
 
 func main() {
+	flag.Parse()
+
 	http.Handle("/auth", websocket.Handler(func(ws *websocket.Conn) { wsHandler(ws, *authsrv) }))
 	http.Handle("/ncpu", websocket.Handler(func(ws *websocket.Conn) { wsHandler(ws, *ncpusrv) }))
 	if err := http.ListenAndServe(*listen, nil); err != nil {
@@ -49,4 +51,3 @@ func wsHandler(ws *websocket.Conn, addr string) {
 		ws.Write(ebuf[:base64.StdEncoding.EncodedLen(n)])
 	}
 }
-
