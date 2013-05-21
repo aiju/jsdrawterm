@@ -181,10 +181,10 @@ function mousechange(k, e) {
 	var c, n;
 
 	c = document.getElementById('draw');
-	mouse = [event.clientX - c.offsetLeft, event.clientY - c.offsetLeft, mouse[2], new Date().getTime() - starttime];
+	mouse = [e.clientX - c.offsetLeft, e.clientY - c.offsetLeft, mouse[2], new Date().getTime() - starttime];
 	switch(k){
-	case 1: mouse[2] |= (1<<event.button); break;
-	case 2: mouse[2] &= ~(1<<event.button); break;
+	case 1: mouse[2] |= (1<<e.button); break;
+	case 2: mouse[2] &= ~(1<<e.button); break;
 	}
 	n = onmouse.length;
 	while(n--)
