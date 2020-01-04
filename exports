@@ -1,0 +1,10 @@
+authpak_new
+authpak_hash
+authpak_finish
+mallocz
+free
+passtokey
+form1M2B
+form1B2M
+hkdf_x_plan9
+memset
