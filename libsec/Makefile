@@ -71,8 +71,8 @@ OFILES=\
 	sha2block64.$O\
 	smallprimes.$O\
 	tsmemcmp.$O\
-	tlshand.$O\
-	x509.$O
+	x509.$O\
+	p_sha256.$O
 
 default: $(LIB)
 $(LIB): $(OFILES)

@@ -8,3 +8,10 @@ form1M2B
 form1B2M
 hkdf_x_plan9
 memset
+p_sha256
+setupChachastate
+chacha_setiv
+ccpoly_encrypt
+ccpoly_decrypt
+sha2_256
+memmove

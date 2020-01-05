@@ -462,28 +462,6 @@ typedef struct Thumbprint{
 	uchar	len;
 } Thumbprint;
 
-typedef struct TLSconn{
-	char	dir[40];	/* connection directory */
-	uchar	*cert;	/* certificate (local on input, remote on output) */
-	uchar	*sessionID;
-	uchar	*psk;
-	int	certlen;
-	int	sessionIDlen;
-	int	psklen;
-	int	(*trace)(char*fmt, ...);
-	PEMChain*chain;	/* optional extra certificate evidence for servers to present */
-	char	*sessionType;
-	uchar	*sessionKey;
-	int	sessionKeylen;
-	char	*sessionConst;
-	char	*serverName;
-	char	*pskID;
-} TLSconn;
-
-/* tlshand.c */
-int tlsClient(int fd, TLSconn *c);
-int tlsServer(int fd, TLSconn *c);
-
 /* thumb.c */
 Thumbprint* initThumbprints(char *ok, char *crl, char *tag);
 void	freeThumbprints(Thumbprint *ok);

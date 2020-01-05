@@ -40,11 +40,33 @@ const AUTHENTLEN = 12 + CHALLEN + NONCELEN + 16;
 
 var C;
 
+function withBuf(n, f) {
+	var t = C.mallocz(n, 1);
+	var t_array = Module.HEAPU8.subarray(t, t + n);
+	try{
+		var r = f(t, t_array);
+		return r;
+	}finally{
+		C.memset(t, 0, n);
+		C.free(t);
+	}
+}
+function withBufP(n, f){
+	var t = C.mallocz(n, 1);
+	var t_array = Module.HEAPU8.subarray(t, t + n);
+	return Promise.resolve(f(t, t_array)).finally(() => {
+		C.memset(t, 0, n);
+		C.free(t);
+	});
+}
+
 function Packet(data) {
 	this.data = new Uint8Array(data);
+	this.closed = false;
 	this.readers = [];
 }
 Packet.prototype.nbread = function(check) {
+	if(this.closed) return undefined;
 	var n = check(this.data);
 	if(typeof n !== 'number') throw new Error("NOPE");
 	if(n < 0 || n > this.data.length)
@@ -54,11 +76,13 @@ Packet.prototype.nbread = function(check) {
 	return r;
 }
 Packet.prototype.readerr = function(check) {
+	if(this.closed) throw new Error("closed");
 	var b = this.nbread(check);
 	if(b === null) throw new Error("EOF");
 	return b;
 }
 Packet.prototype.read = function(check) {
+	if(this.closed) return undefined;
 	var tryread = resolve => () => {
 		let b = this.nbread(check);
 		if(b === null)
@@ -72,12 +96,18 @@ Packet.prototype.read = function(check) {
 	});
 }
 Packet.prototype.write = function(b) {
+	if(this.closed) throw new Error("closed");
 	var n = new Uint8Array(this.data.length + b.length);
 	n.set(this.data, 0);
 	n.set(b, this.data.length);
 	this.data = n;
 	while(this.readers.length > 0 && this.readers[0]())
 		this.readers.shift();
+}
+Packet.prototype.close = function() {
+	this.closed = true;
+	while(this.readers > 0)
+		this.readers.shift()();
 }
 
 function Socket(ws) {
@@ -93,6 +123,10 @@ Socket.prototype.read = function(check) {
 Socket.prototype.write = function(buf) {
 	this.ws.send(buf);
 	return Promise.resolve(buf.length);
+}
+Socket.prototype.close = function(buf) {
+	this.ws.close();
+	this.packet.close();
 }
 function dial(str) {
 	return new Promise((resolve, reject) => {
@@ -221,70 +255,60 @@ function asrdresp(chan, len)
 
 function convM2T(b, key)
 {
-	var buf = C.mallocz(TICKETLEN, 1);
-	var buf_array = Module.HEAPU8.subarray(buf, buf+TICKETLEN);
-	buf_array.set(b);
-	return Promise.resolve().then(() => {
+	return withBufP(TICKETLEN, (buf, buf_array) => {
+		buf_array.set(b);
 		if(C.form1M2B(buf, TICKETLEN, key) < 0)
 			throw new Error("?password mismatch with auth server");
-		return Ticket.read(new Packet(buf_array))
-		.finally(() => C.free(buf));
+		return Ticket.read(new Packet(buf_array));
 	});
 }
 
 function convA2M(s, key)
 {
-	var buf = C.mallocz(AUTHENTLEN, 1);
-	var buf_array = Module.HEAPU8.subarray(buf, buf+AUTHENTLEN);
-	var p = new Packet();
-	return Authenticator.write(p, s)
-	.then(() => {
-		buf_array.set(p.data);
-		C.form1B2M(buf, 1 + CHALLEN + NONCELEN, key);
-		return buf_array.slice();
-	}).finally(() => C.free(buf));
+	return withBufP(AUTHENTLEN, (buf, buf_array) => {
+		var p = new Packet();
+		return Authenticator.write(p, s)
+		.then(() => {
+			buf_array.set(p.data);
+			C.form1B2M(buf, 1 + CHALLEN + NONCELEN, key);
+			return buf_array.slice();
+		});
+	});
 }
 
 function convM2A(b, key)
 {
-	var buf = C.mallocz(AUTHENTLEN, 1);
-	var buf_array = Module.HEAPU8.subarray(buf, buf+AUTHENTLEN);
-	buf_array.set(b);
-	return Promise.resolve().then(() => {
+	return withBufP(AUTHENTLEN, (buf, buf_array) => {
+		buf_array.set(b);
 		if(C.form1M2B(buf, AUTHENTLEN, key) < 0)
 			throw new Error("?you and auth server agree about password. ?server is confused.");
-		return Authenticator.read(new Packet(buf_array))
-		.finally(() => C.free(buf));
+		return Authenticator.read(new Packet(buf_array));
 	});
 }
 
 function getastickets(authkey, tr)
 {
-	var ybuf = C.mallocz(PAKYLEN, 1);
-	var ybuf_array = Module.HEAPU8.subarray(ybuf, ybuf+PAKYLEN);
-	var priv = C.mallocz(PAKPRIVSZ, 1);
-	
-	return dial("ws://localhost:1235").then(chan => {
-		tr.type = AuthPAK;
-		return Ticketreq.write(chan, tr)
-		.then(() => {
-			C.authpak_new(priv, authkey, ybuf, 1);
-			return chan.write(ybuf_array);
-		}).then(() => asrdresp(chan, 2*PAKYLEN)
-		).then(buf => {
-			tr.paky.set(buf.subarray(0, PAKYLEN));
-			ybuf_array.set(buf.subarray(PAKYLEN));
-			if(C.authpak_finish(priv, authkey, ybuf))
-				throw new Error("getastickets failure");
-			tr.type = AuthTreq;
-			return Ticketreq.write(chan, tr);
-		}).then(() => asrdresp(chan, 0)
-		).then(() => chan.read(b=>2*TICKETLEN)
-		);
-	}).finally(() => {
-		C.free(priv);
-		C.free(ybuf);
-	});
+	return withBufP(PAKYLEN, (ybuf, ybuf_array) =>
+	withBufP(PAKPRIVSZ, priv => {
+		return dial("ws://localhost:1235").then(chan => {
+			tr.type = AuthPAK;
+			return Ticketreq.write(chan, tr)
+			.then(() => {
+				C.authpak_new(priv, authkey, ybuf, 1);
+				return chan.write(ybuf_array);
+			}).then(() => asrdresp(chan, 2*PAKYLEN)
+			).then(buf => {
+				tr.paky.set(buf.subarray(0, PAKYLEN));
+				ybuf_array.set(buf.subarray(PAKYLEN));
+				if(C.authpak_finish(priv, authkey, ybuf))
+					throw new Error("getastickets failure");
+				tr.type = AuthTreq;
+				return Ticketreq.write(chan, tr);
+			}).then(() => asrdresp(chan, 0)
+			).then(() => chan.read(b=>2*TICKETLEN)
+			);
+		});
+	}));
 }
 
 function dp9ik(chan, dom) {
@@ -293,60 +317,60 @@ function dp9ik(chan, dom) {
 	var authkey;
 	var sticket, cticket;
 		
-	authkey = C.mallocz(AUTHKEYSZ, 1);
-	crand = new Uint8Array(2*NONCELEN);
-	cchal = new Uint8Array(CHALLEN);
-	window.crypto.getRandomValues(crand);
-	window.crypto.getRandomValues(cchal);
-	
-	return chan.write(cchal)
-	.then(() => Ticketreq.read(chan))
-	.then(tr0 => {
-		tr = tr0;
-		tr.hostid = 'glenda';
-		tr.uid = 'glenda';
-		C.passtokey(authkey, password);
-		C.authpak_hash(authkey, tr.uid);
-		return getastickets(authkey, tr);
-	}).then(tbuf => {
-		sticket = tbuf.subarray(TICKETLEN);
-		let k = Module.HEAPU8.subarray(authkey + AESKEYLEN + DESKEYLEN, authkey + AESKEYLEN + DESKEYLEN + PAKKEYLEN);
-		return convM2T(tbuf.subarray(0, TICKETLEN), k);
-	}).then(tick => {
-		cticket = tick;
-		return chan.write(tr.paky);
-	}).then(() => chan.write(sticket))
-	.then(() => {
-		let auth = {num: AuthAc, rand: crand.subarray(0, NONCELEN), chal: tr.chal};
-		return convA2M(auth, cticket.key);
-	}).then(m => chan.write(m))
-	.then(() => chan.read(b=>AUTHENTLEN))
-	.then(b => convM2A(b, cticket.key))
-	.then(auth => {
-		if(auth.num != AuthAs || tsmemcmp(auth.chal, cchal, CHALLEN) != 0)
-			throw new Error("protocol botch");
-		crand.subarray(NONCELEN).set(auth.rand);
-		var secret = C.mallocz(256, 1);
-		C.hkdf_x_plan9(crand, cticket.key, secret);
-		var ai = {
-			suid: cticket.suid,
-			cuid: cticket.cuid,
-			secret: Module.HEAPU8.slice(secret, secret + 256)
-		};
-		C.free(secret);
-		return ai;
-	})
-	.finally(() => {
-		if(cticket){
-			cticket.key.fill(0);
-			cticket.chal.fill(0);
-		}
-		if(sticket)
-			sticket.fill(0);
-		C.memset(authkey, 0, AUTHKEYSZ);
-		crand.fill(0);
-		cchal.fill(0);
-		C.free(authkey);
+	return withBufP(AUTHKEYSZ, authkey => {
+		crand = new Uint8Array(2*NONCELEN);
+		cchal = new Uint8Array(CHALLEN);
+		window.crypto.getRandomValues(crand);
+		window.crypto.getRandomValues(cchal);
+		
+		return chan.write(cchal)
+		.then(() => Ticketreq.read(chan))
+		.then(tr0 => {
+			tr = tr0;
+			tr.hostid = 'glenda';
+			tr.uid = 'glenda';
+			C.passtokey(authkey, password);
+			C.authpak_hash(authkey, tr.uid);
+			return getastickets(authkey, tr);
+		}).then(tbuf => {
+			sticket = tbuf.subarray(TICKETLEN);
+			let k = Module.HEAPU8.subarray(authkey + AESKEYLEN + DESKEYLEN, authkey + AESKEYLEN + DESKEYLEN + PAKKEYLEN);
+			return convM2T(tbuf.subarray(0, TICKETLEN), k);
+		}).then(tick => {
+			cticket = tick;
+			return chan.write(tr.paky);
+		}).then(() => chan.write(sticket))
+		.then(() => {
+			let auth = {num: AuthAc, rand: crand.subarray(0, NONCELEN), chal: tr.chal};
+			return convA2M(auth, cticket.key);
+		}).then(m => chan.write(m))
+		.then(() => chan.read(b=>AUTHENTLEN))
+		.then(b => convM2A(b, cticket.key))
+		.then(auth => {
+			if(auth.num != AuthAs || tsmemcmp(auth.chal, cchal, CHALLEN) != 0)
+				throw new Error("protocol botch");
+			crand.subarray(NONCELEN).set(auth.rand);
+			var ai = {
+				suid: cticket.suid,
+				cuid: cticket.cuid,
+			};
+			ai.secret = withBuf(256, (secret, secret_buf) => {
+				C.hkdf_x_plan9(crand, cticket.key, secret);
+				return secret_buf.slice();
+			});
+			return ai;
+		})
+		.finally(() => {
+			if(cticket){
+				cticket.key.fill(0);
+				cticket.chal.fill(0);
+			}
+			if(sticket)
+				sticket.fill(0);
+			C.memset(authkey, 0, AUTHKEYSZ);
+			crand.fill(0);
+			cchal.fill(0);
+		});
 	});
 }
 
@@ -374,6 +398,28 @@ function p9any(chan) {
 	}).then(() => dp9ik(chan, dom));
 }
 
+function rcpu() {
+	const script = 
+"syscall fversion 0 65536 buf 256 >/dev/null >[2=1]\n"
+"mount -nc /fd/0 /mnt/term || exit\n"
+"bind -q /mnt/term/dev/cons /dev/cons\n"
+"if(test -r /mnt/term/dev/kbd){\n"
+"	</dev/cons >/dev/cons >[2=1] aux/kbdfs -dq -m /mnt/term/dev\n"
+"	bind -q /mnt/term/dev/cons /dev/cons\n"
+"}\n"
+"</dev/cons >/dev/cons >[2=1] service=cpu %s\n"
+"echo -n hangup >/proc/$pid/notepg\n";
+	var chan;
+
+	dial("ws://localhost:1234")
+	.then(rawchan => p9any(rawchan).then(ai => tlsClient(rawchan, ai.secret)))
+	.then(chan_ => chan = chan_)
+	.then(() => chan.write(new TextEncoder("utf-8").encode(script.length + "\n" + script)))
+	.then(() => chan.read(b => b.length > 0 ? b.length : -1))
+	.then(m => console.log(new TextDecoder("utf-8").decode(m)));
+
+}
+
 Module['onRuntimeInitialized'] = () => {
 	C = {
 		mallocz: Module.cwrap('mallocz', 'number', ['number', 'number']),
@@ -385,9 +431,14 @@ Module['onRuntimeInitialized'] = () => {
 		form1M2B: Module.cwrap('form1M2B', 'number', ['number', 'number', 'array']),
 		form1B2M: Module.cwrap('form1B2M', 'number', ['number', 'number', 'array']),
 		hkdf_x_plan9: Module.cwrap('hkdf_x_plan9', null, ['array', 'array', 'number']),
-		memset: Module.cwrap('memset', null, ['number', 'number', 'number'])
+		memset: Module.cwrap('memset', null, ['number', 'number', 'number']),
+		memmove: Module.cwrap('memmove', null, ['number', 'number', 'number']),
+		p_sha256: Module.cwrap('p_sha256', null, ['number', 'number', 'number', 'number', 'string', 'number', 'number', 'number']),
+		chacha_setiv: Module.cwrap('chacha_setiv', null, ['number', 'array']),
+		ccpoly_encrypt: Module.cwrap('ccpoly_encrypt', null, ['number', 'number', 'array', 'number', 'number', 'number']),
+		ccpoly_decrypt: Module.cwrap('ccpoly_encrypt', 'number', ['number', 'number', 'array', 'number', 'number', 'number']),
+		setupChachastate: Module.cwrap('setupChachastate', null, ['number', 'number', 'number', 'number', 'number', 'number']),
+		sha2_256: Module.cwrap('sha2_256', 'number', ['array', 'number', 'number', 'number'])
 	};
-	dial("ws://localhost:1234")
-	.then(chan => p9any(chan)
-		.then(ai => tlsClient(chan, ai)));
+	rcpu();
 };

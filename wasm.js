@@ -2044,6 +2044,48 @@ asm["mallocz"] = function() {
   return real__mallocz.apply(null, arguments);
 };
 
+var real__ccpoly_encrypt = asm["ccpoly_encrypt"];
+asm["ccpoly_encrypt"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return real__ccpoly_encrypt.apply(null, arguments);
+};
+
+var real__ccpoly_decrypt = asm["ccpoly_decrypt"];
+asm["ccpoly_decrypt"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return real__ccpoly_decrypt.apply(null, arguments);
+};
+
+var real__setupChachastate = asm["setupChachastate"];
+asm["setupChachastate"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return real__setupChachastate.apply(null, arguments);
+};
+
+var real__chacha_setiv = asm["chacha_setiv"];
+asm["chacha_setiv"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return real__chacha_setiv.apply(null, arguments);
+};
+
+var real__sha2_256 = asm["sha2_256"];
+asm["sha2_256"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return real__sha2_256.apply(null, arguments);
+};
+
+var real__p_sha256 = asm["p_sha256"];
+asm["p_sha256"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return real__p_sha256.apply(null, arguments);
+};
+
 var real__fflush = asm["fflush"];
 asm["fflush"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
@@ -2084,6 +2126,13 @@ asm["memset"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
   assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
   return real__memset.apply(null, arguments);
+};
+
+var real__memmove = asm["memmove"];
+asm["memmove"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return real__memmove.apply(null, arguments);
 };
 
 var real_stackSave = asm["stackSave"];
@@ -2204,6 +2253,42 @@ var _mallocz = Module["_mallocz"] = function() {
   return Module["asm"]["mallocz"].apply(null, arguments)
 };
 
+var _ccpoly_encrypt = Module["_ccpoly_encrypt"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["ccpoly_encrypt"].apply(null, arguments)
+};
+
+var _ccpoly_decrypt = Module["_ccpoly_decrypt"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["ccpoly_decrypt"].apply(null, arguments)
+};
+
+var _setupChachastate = Module["_setupChachastate"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["setupChachastate"].apply(null, arguments)
+};
+
+var _chacha_setiv = Module["_chacha_setiv"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["chacha_setiv"].apply(null, arguments)
+};
+
+var _sha2_256 = Module["_sha2_256"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["sha2_256"].apply(null, arguments)
+};
+
+var _p_sha256 = Module["_p_sha256"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["p_sha256"].apply(null, arguments)
+};
+
 var _fflush = Module["_fflush"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
   assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
@@ -2238,6 +2323,12 @@ var _memset = Module["_memset"] = function() {
   assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
   assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
   return Module["asm"]["memset"].apply(null, arguments)
+};
+
+var _memmove = Module["_memmove"] = function() {
+  assert(runtimeInitialized, 'you need to wait for the runtime to be ready (e.g. wait for main() to be called)');
+  assert(!runtimeExited, 'the runtime was exited (use NO_EXIT_RUNTIME to keep it alive after main() exits)');
+  return Module["asm"]["memmove"].apply(null, arguments)
 };
 
 var stackSave = Module["stackSave"] = function() {
