@@ -87,12 +87,12 @@ extern	int	errstr(char*, uint);
 extern	int	rerrstr(char*, uint);
 extern	int	encrypt(void*, void*, int);
 extern	int	decrypt(void*, void*, int);
-#define qlock(x)
-#define qunlock(x)
+#define qlock(x) ((void)(x))
+#define qunlock(x) ((void)(x))
 extern	long	time(long*);
 extern	vlong	nsec(void);
-#define lock(x)
-#define unlock(x)
+#define lock(x) ((void)(x))
+#define unlock(x) ((void)(x))
 extern	int	iprint(char*, ...);
 extern	int	atexit(void (*)(void));
 extern	void	exits(char*);
