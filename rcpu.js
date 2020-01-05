@@ -40,58 +40,55 @@ const AUTHENTLEN = 12 + CHALLEN + NONCELEN + 16;
 
 var C;
 
+function Packet(data) {
+	this.data = new Uint8Array(data);
+	this.readers = [];
+}
+Packet.prototype.nbread = function(check) {
+	var n = check(this.data);
+	if(typeof n !== 'number') throw new Error("NOPE");
+	if(n < 0 || n > this.data.length)
+		return null;
+	var r = this.data.subarray(0,n);
+	this.data = this.data.subarray(n);
+	return r;
+}
+Packet.prototype.readerr = function(check) {
+	var b = this.nbread(check);
+	if(b === null) throw new Error("EOF");
+	return b;
+}
+Packet.prototype.read = function(check) {
+	var tryread = resolve => () => {
+		let b = this.nbread(check);
+		if(b === null)
+			return false;
+		resolve(b);
+		return true;
+	};
+	return new Promise((resolve, reject) => {
+		if(!tryread(resolve)())
+			this.readers.push(tryread(resolve));
+	});
+}
+Packet.prototype.write = function(b) {
+	var n = new Uint8Array(this.data.length + b.length);
+	n.set(this.data, 0);
+	n.set(b, this.data.length);
+	this.data = n;
+	while(this.readers.length > 0 && this.readers[0]())
+		this.readers.shift();
+}
+
 function Socket(ws) {
 	this.ws = ws;
-	this.error = null;
-	this.queue = [];
-	this.readers = [];
-	let s = this;
-	this.ws.onmessage = function(event) {
-		s.queue.push(new Uint8Array(event.data));
-		while(s.readers.length != 0 && s.readers[0]())
-			s.readers.shift();
-	};
-	this.ws.onerror = function(err) {
-		s.error = new Error(err);
-		while(s.readers.length != 0)
-			s.readers.shift()();
+	this.packet = new Packet();
+	this.ws.onmessage = event => {
+		this.packet.write(new Uint8Array(event.data));
 	};
 }
-Socket.prototype.read = function(test) {
-	let s = this;
-	let buf = new Uint8Array();
-	function tryread(resolve, reject){
-		if(s.error){
-			reject(s.error);
-			return true;
-		}else{
-			while(s.queue.length != 0){
-				var nbuf = new Uint8Array(buf.length + s.queue[0].length);
-				nbuf.set(buf);
-				nbuf.set(s.queue[0], buf.length);
-				for(var i = buf.length + 1; i <= nbuf.length; i++)
-					if(test(nbuf.subarray(0, i))){
-						if(i < nbuf.length)
-							s.queue[0] = s.queue[0].subarray(i - buf.length);
-						else
-							s.queue.shift();
-						resolve(nbuf.subarray(0, i));
-						return true;
-					}
-				buf = nbuf;
-				s.queue.shift();
-			}
-			return false;
-		}
-	}
-	return new Promise((resolve, reject) => {
-		if(!tryread(resolve, reject))
-			s.readers.push(() => tryread(resolve, reject));
-	});
-};
-Socket.prototype.readn = function(n) {
-	if(n <= 0) return Promise.resolve(new Uint8Array());
-	return this.read(b => b.length == n);
+Socket.prototype.read = function(check) {
+	return this.packet.read(check);
 };
 Socket.prototype.write = function(buf) {
 	this.ws.send(buf);
@@ -120,65 +117,56 @@ function to_cstr(b,n) {
 	return c;
 }
 function readstr(chan) {
-	return chan.read(b => b[b.length - 1] == 0).then(from_cstr);
-}
-function structRead(stream, fmt){
-	var p = Promise.resolve();
-	let get = t => stream.read(t);
-	let out = {};
-	for(var i = 0; i < fmt.length; i += 2){
-		let n = fmt[i];
-		let fn = fmt[i+1];
-		p = p.then(() => fn.read(get).then(s => out[n] = s));
+	function strcheck(b) {
+		let n = b.indexOf(0);
+		if(n < 0) return -1;
+		return n + 1;
 	}
-	return p.then(() => out);
+	return chan.read(strcheck).then(from_cstr);
 }
-function structWrite(stream, fmt, obj){
-	var p = Promise.resolve();
-	let put = v => stream.write(v);
-	for(var i = 0; i < fmt.length; i += 2){
-		let v = obj[fmt[i]];
-		let fn = fmt[i+1];
-		p = p.then(() => fn.write(put, v));
-	}
-	return p;
-}
-function BufStream(buf) {
-	var p = 0;
-	return {read: test => new Promise((resolve, reject) => {
-			for(var n = 1; p + n <= buf.length; n++){
-				let a = buf.subarray(p, p + n);
-				if(test(a)){
-					p += n;
-					return resolve(a.slice());
-				}
+function Struct(fmt){
+	return {
+		read: stream => {
+			var p = Promise.resolve();
+			let out = {};
+			for(var i = 0; i < fmt.length; i += 2){
+				let n = fmt[i];
+				let fn = fmt[i+1];
+				p = p.then(() => fn.read(stream).then(s => out[n] = s));
 			}
-			reject(new Error('EOF in BufStream'));
-		}),
-		write: v => {
-			buf.subarray(p, p + v.length).set(v);
-			p += v.length;
-		}};
+			return p.then(() => out);
+		},
+		write: (stream, obj) => {
+			var p = Promise.resolve();
+			let put = v => stream.write(v);
+			for(var i = 0; i < fmt.length; i += 2){
+				let v = obj[fmt[i]];
+				let fn = fmt[i+1];
+				p = p.then(() => fn.write(stream, v));
+			}
+			return p;
+		}
+	};
 }
 function Uint8(n) {
 	if(n === undefined){
 		return {
-			read: get => get(buf => buf.length == 1).then(x => x[0]),
-			write: (put, val) => put(new Uint8Array([val]))
+			read: stream => stream.read(b=>1).then(x => x[0]),
+			write: (stream, val) => stream.write(new Uint8Array([val]))
 		};
 	}
 	return {
-		read: get => get(buf => buf.length == n),
-		write: (put, val) => put(val)
+		read: stream => stream.read(b=>n),
+		write: (stream, val) => stream.write(val)
 	};
 }
 function FixedString(n) {
 	return {
-		read: get => get(buf => buf.length == n).then(from_cstr),
-		write: (put, val) => put(to_cstr(val, n))
+		read: stream => stream.read(b=>n).then(from_cstr),
+		write: (stream, val) => stream.write(to_cstr(val, n))
 	};
 }
-const Ticketreq = [
+const Ticketreq = Struct([
 	'type', Uint8(),
 	'authid', FixedString(ANAMELEN),
 	'authdom', FixedString(DOMLEN),
@@ -186,19 +174,19 @@ const Ticketreq = [
 	'hostid', FixedString(ANAMELEN),
 	'uid', FixedString(ANAMELEN),
 	'paky', Uint8(PAKYLEN)
-];
-const Ticket = [
+]);
+const Ticket = Struct([
 	'num', Uint8(),
 	'chal', Uint8(CHALLEN),
 	'cuid', FixedString(ANAMELEN),
 	'suid', FixedString(ANAMELEN),
 	'key', Uint8(NONCELEN)
-];
-const Authenticator = [
+]);
+const Authenticator = Struct([
 	'num', Uint8(),
 	'chal', Uint8(CHALLEN),
 	'rand', Uint8(NONCELEN)
-];
+]);
 
 function tsmemcmp(a, b, n)
 {
@@ -212,18 +200,18 @@ function tsmemcmp(a, b, n)
 
 function asrdresp(chan, len)
 {
-	return chan.readn(1).then(c => {
+	return chan.read(b=>1).then(c => {
 		switch(c[0]){
 		case AuthOK:
-			return chan.readn(len);
+			return chan.read(b=>len);
 		case AuthErr:
-			return chan.readn(64).then(e => {throw new Error("remote: " + from_cstr(e))});
+			return chan.read(b=>64).then(e => {throw new Error("remote: " + from_cstr(e))});
 		case AuthOKvar:
-			return chan.readn(5).then(b => {
+			return chan.read(b=>5).then(b => {
 				var n = from_cstr(b)|0;
 				if(n <= 0 || n > len)
 					throw new Error("AS protocol botch");
-				return chan.readn(n)
+				return chan.read(b=>n)
 			});
 		default:
 			throw new Error("AS protocol botch");
@@ -239,7 +227,7 @@ function convM2T(b, key)
 	return Promise.resolve().then(() => {
 		if(C.form1M2B(buf, TICKETLEN, key) < 0)
 			throw new Error("?password mismatch with auth server");
-		return structRead(BufStream(buf_array), Ticket)
+		return Ticket.read(new Packet(buf_array))
 		.finally(() => C.free(buf));
 	});
 }
@@ -248,8 +236,10 @@ function convA2M(s, key)
 {
 	var buf = C.mallocz(AUTHENTLEN, 1);
 	var buf_array = Module.HEAPU8.subarray(buf, buf+AUTHENTLEN);
-	return structWrite(BufStream(buf_array), Authenticator, s)
+	var p = new Packet();
+	return Authenticator.write(p, s)
 	.then(() => {
+		buf_array.set(p.data);
 		C.form1B2M(buf, 1 + CHALLEN + NONCELEN, key);
 		return buf_array.slice();
 	}).finally(() => C.free(buf));
@@ -263,7 +253,7 @@ function convM2A(b, key)
 	return Promise.resolve().then(() => {
 		if(C.form1M2B(buf, AUTHENTLEN, key) < 0)
 			throw new Error("?you and auth server agree about password. ?server is confused.");
-		return structRead(BufStream(buf_array), Authenticator)
+		return Authenticator.read(new Packet(buf_array))
 		.finally(() => C.free(buf));
 	});
 }
@@ -276,7 +266,7 @@ function getastickets(authkey, tr)
 	
 	return dial("ws://localhost:1235").then(chan => {
 		tr.type = AuthPAK;
-		return structWrite(chan, Ticketreq, tr)
+		return Ticketreq.write(chan, tr)
 		.then(() => {
 			C.authpak_new(priv, authkey, ybuf, 1);
 			return chan.write(ybuf_array);
@@ -287,9 +277,9 @@ function getastickets(authkey, tr)
 			if(C.authpak_finish(priv, authkey, ybuf))
 				throw new Error("getastickets failure");
 			tr.type = AuthTreq;
-			return structWrite(chan, Ticketreq, tr);
+			return Ticketreq.write(chan, tr);
 		}).then(() => asrdresp(chan, 0)
-		).then(() => chan.readn(2*TICKETLEN)
+		).then(() => chan.read(b=>2*TICKETLEN)
 		);
 	}).finally(() => {
 		C.free(priv);
@@ -310,7 +300,7 @@ function dp9ik(chan, dom) {
 	window.crypto.getRandomValues(cchal);
 	
 	return chan.write(cchal)
-	.then(() => structRead(chan, Ticketreq))
+	.then(() => Ticketreq.read(chan))
 	.then(tr0 => {
 		tr = tr0;
 		tr.hostid = 'glenda';
@@ -330,7 +320,7 @@ function dp9ik(chan, dom) {
 		let auth = {num: AuthAc, rand: crand.subarray(0, NONCELEN), chal: tr.chal};
 		return convA2M(auth, cticket.key);
 	}).then(m => chan.write(m))
-	.then(() => chan.readn(AUTHENTLEN))
+	.then(() => chan.read(b=>AUTHENTLEN))
 	.then(b => convM2A(b, cticket.key))
 	.then(auth => {
 		if(auth.num != AuthAs || tsmemcmp(auth.chal, cchal, CHALLEN) != 0)
@@ -363,7 +353,7 @@ function dp9ik(chan, dom) {
 function p9any(chan) {
 	var v2, dom;
 	
-	readstr(chan).then(str => {
+	return readstr(chan).then(str => {
 		v2 = str.startsWith("v2 ");
 		if(v2)
 			str = str.substr(4);
@@ -381,8 +371,7 @@ function p9any(chan) {
 				if(s != 'OK')
 					throw new Error('did not get OK in p9any: got ' + s);
 			});
-	}).then(() => dp9ik(chan, dom))
-	.then(console.log);
+	}).then(() => dp9ik(chan, dom));
 }
 
 Module['onRuntimeInitialized'] = () => {
@@ -399,5 +388,6 @@ Module['onRuntimeInitialized'] = () => {
 		memset: Module.cwrap('memset', null, ['number', 'number', 'number'])
 	};
 	dial("ws://localhost:1234")
-	.then(chan => p9any(chan));
+	.then(chan => p9any(chan)
+		.then(ai => tlsClient(chan, ai)));
 };
