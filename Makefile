@@ -30,4 +30,4 @@ libc/libc.a:
 
 .PHONY: libsec/libsec.a
 libsec/libsec.a:
-	(cd libc; $(MAKE))
+	(cd libsec; $(MAKE))
