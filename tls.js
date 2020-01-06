@@ -444,7 +444,6 @@ function tlsClient(chan, psk) {
 	}
 	function recvFragment() {
 		function recLen(b) {
-			console.log(b);
 			if(b.length < 5) return -1;
 			return 5 + (b[3] << 8 | b[4]);
 		}
