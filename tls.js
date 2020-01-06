@@ -49,10 +49,33 @@ function Bytes(n) {
 		get: b => b.get(n)
 	};
 };
-const U8 = {
+const u8 = {
 	put: (b,c) => b.put([c]),
 	get: b => b.get(1)[0]
 };
+const u16 = {
+	put: (b,c) => b.put([c,c>>8]),
+	get: b => { let x = b.get(2); return x[1] << 8 | x[0]; }
+};
+const u24 = {
+	put: (b,c) => b.put([c,c>>8,c>>16]),
+	get: b => { let x = b.get(3); return x[2] << 16 | x[1] << 8 | x[0]; }
+};
+const u32 = {
+	put: (b,c) => b.put([c,c>>8,c>>16,c>>24]),
+	get: b => { let x = b.get(4); return x[3] << 24 | x[2] << 16 | x[1] << 8 | x[0]; }
+};
+const u64 = {
+	put: (b,c) => {
+		let a = new Uint8Array(8);
+		for(var i = 0; i < 8; i++)
+			a[i] = c / 2**(8*i);
+		b.put(a);
+	},
+	get: b => { let x = b.get(8); return x[3] << 24 | x[2] << 16 | x[1] << 8 | x[0]; }
+	/*TODO*/
+};
+const U8 = u8;
 const U16 = {
 	put: (b,c) => b.put([c>>8,c]),
 	get: b => { let x = b.get(2); return x[0] << 8 | x[1]; }
@@ -102,7 +125,8 @@ function Struct(s) {
 		}
 	};
 }
-function Length(count,data) {
+function Length(count,data,offset) {
+	if(offset === undefined) offset = 0;
 	return {
 		put: (b,l,o) => {
 			let p0 = b.p;
@@ -111,11 +135,11 @@ function Length(count,data) {
 			data.put(b, l, o);
 			let p2 = b.p;
 			b.p = p0;
-			count.put(b, p2 - p1, o);
+			count.put(b, p2 - p1 + offset, o);
 			b.p = p2;
 		},
 		get: (b,o) => {
-			let c = count.get(b, o);
+			let c = count.get(b, o) - offset;
 			let e = b.rp + c;
 			let op = b.p;
 			if(b.p < e) throw new Error("short record");
@@ -123,6 +147,22 @@ function Length(count,data) {
 			let l = data.get(b, o);
 			if(b.rp !== e) throw new Error("short record");
 			b.p = op;
+			return l;
+		}
+	};
+}
+function Array(count,data) {
+	return {
+		put: (b,l,o) => {
+			count.put(b, l.length);
+			for(var i = 0; i < l.length; i++)
+				data.put(b, l[i], o);
+		},
+		get: (b,o) => {
+			let l = [];
+			let c = count.get(b, o);
+			for(var i = 0; i < c; i++)
+				l.push(data.get(b, o));
 			return l;
 		}
 	};
@@ -166,6 +206,12 @@ function OpaqueVector(count) {
 			return b.get(l);
 		}
 	}
+}
+function String(count) {
+	return {
+		put: (b,c) => OpaqueVector(count).put(b, new TextEncoder("utf-8").encode(c)),
+		get: b => new TextDecoder("utf-8").decode(OpaqueVector(count).get(b))
+	};
 }
 function Optional(data) {
 	return {
@@ -237,7 +283,7 @@ function tlsClient(chan, psk) {
 	const ServerHelloDone = Struct([]);
 	const HClientKeyExchange = 16;
 	const ClientKeyExchange = Struct([
-		'psk_identity', OpaqueVector(U16)
+		'psk_identity', String(U16)
 	]);
 	const HFinished = 20;
 	const Finished = Struct([
@@ -398,8 +444,9 @@ function tlsClient(chan, psk) {
 	}
 	function recvFragment() {
 		function recLen(b) {
+			console.log(b);
 			if(b.length < 5) return -1;
-			return 5 + (b[3] << 16 | b[4]);
+			return 5 + (b[3] << 8 | b[4]);
 		}
 		chan.read(recLen)
 			.then(b => {
@@ -501,7 +548,7 @@ function tlsClient(chan, psk) {
 	function sendClientKeyExchange() {
 		return sendHandshake({
 			msg_type: HClientKeyExchange,
-			psk_identity: new TextEncoder("utf-8").encode("p9secret")
+			psk_identity: "p9secret"
 		});
 	}
 	function sendChangeCipherSpec() {
@@ -558,7 +605,8 @@ function tlsClient(chan, psk) {
 		return application.read(check);
 	};
 	TlsConn.prototype.write = function(b) {
-		return sendData(new VBuffer(b), FApplicationData);
+		if(!(b instanceof VBuffer)) b = new VBuffer(b);
+		return sendData(b, FApplicationData);
 	};
 
 	recvFragment();

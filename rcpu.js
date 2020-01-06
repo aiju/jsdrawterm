@@ -400,24 +400,24 @@ function p9any(chan) {
 
 function rcpu() {
 	const script = 
-"syscall fversion 0 65536 buf 256 >/dev/null >[2=1]\n"
-"mount -nc /fd/0 /mnt/term || exit\n"
-"bind -q /mnt/term/dev/cons /dev/cons\n"
-"if(test -r /mnt/term/dev/kbd){\n"
-"	</dev/cons >/dev/cons >[2=1] aux/kbdfs -dq -m /mnt/term/dev\n"
-"	bind -q /mnt/term/dev/cons /dev/cons\n"
-"}\n"
-"</dev/cons >/dev/cons >[2=1] service=cpu %s\n"
+"syscall fversion 0 65536 buf 256 >/dev/null >[2=1]\n" + 
+"mount -nc /fd/0 /mnt/term || exit\n" + 
+"bind -q /mnt/term/dev/cons /dev/cons\n" + 
+"if(test -r /mnt/term/dev/kbd){\n" + 
+"	</dev/cons >/dev/cons >[2=1] aux/kbdfs -dq -m /mnt/term/dev\n" + 
+"	bind -q /mnt/term/dev/cons /dev/cons\n" + 
+"}\n" + 
+"</dev/cons >/dev/cons >[2=1] service=cpu rc -li\n" + 
 "echo -n hangup >/proc/$pid/notepg\n";
 	var chan;
+	
+	document.getElementById('console').onkeydown = input;
 
-	dial("ws://localhost:1234")
+	return dial("ws://localhost:1234")
 	.then(rawchan => p9any(rawchan).then(ai => tlsClient(rawchan, ai.secret)))
 	.then(chan_ => chan = chan_)
 	.then(() => chan.write(new TextEncoder("utf-8").encode(script.length + "\n" + script)))
-	.then(() => chan.read(b => b.length > 0 ? b.length : -1))
-	.then(m => console.log(new TextDecoder("utf-8").decode(m)));
-
+	.then(() => NineP(chan));
 }
 
 Module['onRuntimeInitialized'] = () => {
