@@ -59,6 +59,12 @@ function withBufP(n, f){
 		C.free(t);
 	});
 }
+function errstr() {
+	return withBuf(256, buf => {
+		C.rerrstr(buf, 256);
+		return UTF8ToString(buf, 256)
+	});
+}
 
 function Packet(data) {
 	this.data = new Uint8Array(data);
@@ -411,8 +417,6 @@ function rcpu() {
 "echo -n hangup >/proc/$pid/notepg\n";
 	var chan;
 	
-	document.getElementById('console').onkeydown = input;
-
 	return dial("ws://localhost:1234")
 	.then(rawchan => p9any(rawchan).then(ai => tlsClient(rawchan, ai.secret)))
 	.then(chan_ => chan = chan_)
@@ -438,7 +442,26 @@ Module['onRuntimeInitialized'] = () => {
 		ccpoly_encrypt: Module.cwrap('ccpoly_encrypt', null, ['number', 'number', 'array', 'number', 'number', 'number']),
 		ccpoly_decrypt: Module.cwrap('ccpoly_encrypt', 'number', ['number', 'number', 'array', 'number', 'number', 'number']),
 		setupChachastate: Module.cwrap('setupChachastate', null, ['number', 'number', 'number', 'number', 'number', 'number']),
-		sha2_256: Module.cwrap('sha2_256', 'number', ['array', 'number', 'number', 'number'])
+		sha2_256: Module.cwrap('sha2_256', 'number', ['array', 'number', 'number', 'number']),
+		memimageinit: Module.cwrap('memimageinit', null, []),
+		memlalloc: Module.cwrap('memlalloc', 'number', ['number', 'number', 'number', 'number', 'number']),
+		allocmemimage: Module.cwrap('allocmemimage', 'number', ['number', 'number']),
+		memfillcolor: Module.cwrap('memfillcolor', null, ['number', 'number']),
+		memload: Module.cwrap('memload', 'number', ['number', 'number', 'number', 'number', 'number']),
+		memunload: Module.cwrap('memunload', 'number', ['number', 'number', 'number', 'number']),
+		memdraw: Module.cwrap('memdraw', null, ['number', 'number', 'number', 'number', 'number', 'number', 'number']),
+		byteaddr: Module.cwrap('byteaddr', null, ['number', 'number']),
+		memlalloc: Module.cwrap('memlalloc', null, ['number', 'number', 'number', 'number', 'number']),
+		rerrstr: Module.cwrap('rerrstr', null, ['number', 'number']),
+		memimageflags: Module.cwrap('memimageflags', 'number', ['number', 'number', 'number']),
+		memldelete: Module.cwrap('memldelete', null, ['number']),
+		freememimage: Module.cwrap('freememimage', null, ['number'])
 	};
+	document.getElementById('console').onkeydown = input;
+	document.getElementById('canvas').onmouseup = mouse;
+	document.getElementById('canvas').onmousemove = mouse;
+	document.getElementById('canvas').onmousedown = mouse;
+	document.getElementById('canvas').oncontextmenu = function(e) {e.preventDefault(); };
+	devdraw();
 	rcpu();
 };

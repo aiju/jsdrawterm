@@ -47,7 +47,7 @@ File.prototype.walk = function(name){
 };
 File.prototype.open = function(fid, mode){
 }
-File.prototype.read = function(fid, data, mode){
+File.prototype.read = function(fid, count, offset){
 	return new Error('no reads');
 }
 File.prototype.dirread = function() {
@@ -129,6 +129,26 @@ const devzero = new File('zero', 0, dev);
 devzero.read = function(fid, count, offset){return new Uint8Array(count);}
 devzero.write = function(fid, data, offset){}
 
+var mousereaders = [];
+const devmouse = new File('mouse', 0, dev);
+devmouse.read = function(fid, count, offset){
+	return new Promise(function(resolve, reject){
+		mousereaders.push(s => resolve(s.substr(0, count)));
+	});
+}
+function mouse(event){
+	let f = mousereaders.shift();
+	if(f === undefined) return;
+	let rect = canvas.getBoundingClientRect()
+	let s = 'm' + [
+			event.clientX - rect.left,
+			event.clientY - rect.top,
+			event.buttons & 1 | event.buttons >> 1 & 2 | event.buttons << 1 & 4,
+			event.timeStamp|0
+		].map(s => s.toString().padStart(11)).join(' ') + ' ';
+	f(s);
+}
+
 function NineP(chan){
 	const Eduptag = new Error('duplicate tag');
 	const Enoauth = new Error('authentication not required');
@@ -174,7 +194,7 @@ function NineP(chan){
 		throw new Error("9P botch");
 	}
 	
-	const string = String(u16);
+	const string = VariableString(u16);
 	const qid = Struct(['type', u8, 'vers', u32, 'path', u64]);
 	const dirstat = Length(u16, Struct([
 		'type', u16,
@@ -260,7 +280,7 @@ function NineP(chan){
 			.then(b => unpack(Msg9P, b));
 	}
 	function sendMsg(m) {
-		console.log('-> ', m);
+		//console.log('-> ', m);
 		var b = pack(Msg9P, m);
 		return chan.write(b);
 	}
@@ -456,7 +476,7 @@ function NineP(chan){
 	}
 	function srv() {
 		return recvMsg().then(m => {
-			console.log('<- ', m);
+			//console.log('<- ', m);
 			let req = newReq(m);
 			if(req === null)
 				return sendMsg({type: $Rerror, tag: m.tag, ename: Eduptag});

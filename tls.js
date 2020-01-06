@@ -207,7 +207,7 @@ function OpaqueVector(count) {
 		}
 	}
 }
-function String(count) {
+function VariableString(count) {
 	return {
 		put: (b,c) => OpaqueVector(count).put(b, new TextEncoder("utf-8").encode(c)),
 		get: b => new TextDecoder("utf-8").decode(OpaqueVector(count).get(b))
@@ -283,7 +283,7 @@ function tlsClient(chan, psk) {
 	const ServerHelloDone = Struct([]);
 	const HClientKeyExchange = 16;
 	const ClientKeyExchange = Struct([
-		'psk_identity', String(U16)
+		'psk_identity', VariableString(U16)
 	]);
 	const HFinished = 20;
 	const Finished = Struct([

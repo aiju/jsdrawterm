@@ -15,3 +15,15 @@ ccpoly_encrypt
 ccpoly_decrypt
 sha2_256
 memmove
+memimageinit
+allocmemimage
+memfillcolor
+memload
+memunload
+memdraw
+byteaddr
+memlalloc
+rerrstr
+memimageflags
+memldelete
+freememimage

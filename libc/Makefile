@@ -84,6 +84,8 @@ OFILES=\
 	truerand.$O\
 	print.$O\
 	write.$O\
+	tas.$O\
+	werrstr.$O\
 
 default: $(LIB)
 $(LIB): $(OFILES)

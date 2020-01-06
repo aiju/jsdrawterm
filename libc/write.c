@@ -8,5 +8,5 @@
 int
 write(int fd, void *buf, int n)
 {
-	EM_ASM({console.log(UTF8ToString($0))}, buf);
+	EM_ASM({console.log(UTF8ToString($0, $1))}, buf, n);
 }
