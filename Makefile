@@ -17,7 +17,7 @@ $(TARG): $(LIBS)
 
 .PHONY: clean
 clean:
-	rm -f *.o */*.o */*.a *.a wasm.js wasm.wasm
+	rm -f *.o */*.o */*.a *.a blob.js blob.wasm
 
 .PHONY: libauthsrv/libauthsrv.a
 libauthsrv/libauthsrv.a:
