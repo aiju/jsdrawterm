@@ -3,14 +3,10 @@ function devcons() {
 	const ctx = canvas.getContext('2d');
 	
 	const kbmap = {
-		Space: ' ',
 		Enter: '\n',
-		AltLeft: '\uf015',
-		AltRight: '\uf015',
-		ShiftLeft: '\uf016',
-		ShiftRight: '\uf016',
-		ControlLeft: '\uf017',
-		ControlRight: '\uf017',
+		Alt: '\uf015',
+		Shift: '\uf016',
+		Control: '\uf017',
 		End: '\uf018',
 		Home: '\uf00d',
 		ArrowUp: '\uf00e',
@@ -45,42 +41,25 @@ function devcons() {
 	}
 	let active = '';
 	function keymap(k){
-		if(k.match(/^Key[A-Z]$/))
-			return k[3].toLowerCase();
-		else if(k.match(/^Digit[0-9]$/))
-			return k[5];
+		if(k.length == 1)
+			return k;
 		else if(k in kbmap)
 			return kbmap[k];
 		else
 			return null;
 	}
 	document.addEventListener('keydown', function(event){
-		if(!event.repeat){
-			let m = keymap(event.code);
-			if(m === null) return;
-			if(active.indexOf(m) < 0)
-				active += m;
-			kbinput('k' + active + '\0');
-		}
-		if(event.ctrlKey){
-			if(event.key.length == 1){
-				let n = event.key.charCodeAt(0);
-				if(n >= 0x20 && n < 0x7f)
-					kbinput('c' + String.fromCharCode(n & 0x1f) + '\0');	
-			}
-		}else if(!event.altKey && !event.metaKey){
-			if(event.key.length == 1)
-				kbinput('c' + event.key + '\0');
-			else if(event.key in kbmap)
-				kbinput('c' + kbmap[event.key] + '\0');
-		}
+		let m = keymap(event.key);
+		if(m === null) return;
+		if(event.ctrlKey && event.shiftKey) return;
+		kbinput('r' + m + '\0');
 		event.preventDefault();
 	});
 	document.addEventListener('keyup', function(event){
-		let m = keymap(event.code);
+		let m = keymap(event.key);
 		if(m === null) return;
-		active = active.replace(m, '');
-		kbinput('K' + active + '\0');
+		if(event.ctrlKey && event.shiftKey) return;
+		kbinput('R' + m + '\0');
 		event.preventDefault();
 	});
 	
@@ -153,7 +132,6 @@ function devcons() {
 			let n = content.length - 1;
 			if(n >= 0){
 				content[n] = content[n].substr(0, content[n].length - 1);
-				console.log(content);
 				redraw();
 			}
 			return;
