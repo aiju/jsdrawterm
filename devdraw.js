@@ -313,7 +313,6 @@ function devdraw() {
 			throw new Error("...");
 		};
 		function processmsg(m, buf) {
-			console.log(m);
 			switch(m.type){
 			case 'A':
 				if(m.id in allscreens) return new Error('screen id reused');

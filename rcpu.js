@@ -465,11 +465,7 @@ Module['onRuntimeInitialized'] = () => {
 		memltofrontn: Module.cwrap('memltofrontn', null, ['number', 'number']),
 		memltorearn: Module.cwrap('memltofrontn', null, ['number', 'number']),
 	};
-	document.getElementById('console').onkeydown = input;
-	document.getElementById('canvas').onmouseup = mouse;
-	document.getElementById('canvas').onmousemove = mouse;
-	document.getElementById('canvas').onmousedown = mouse;
-	document.getElementById('canvas').oncontextmenu = function(e) {e.preventDefault(); };
 	devdraw();
+	devcons();
 	rcpu();
 };
