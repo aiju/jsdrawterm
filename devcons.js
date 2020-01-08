@@ -1,3 +1,5 @@
+"use strict";
+
 function devcons() {
 	const canvas = document.getElementById('canvas');
 	const ctx = canvas.getContext('2d');
@@ -39,7 +41,6 @@ function devcons() {
 		if(kbreaders.length > 0)
 			kbreaders.shift()();
 	}
-	let active = '';
 	function keymap(k){
 		if(k.length == 1)
 			return k;
