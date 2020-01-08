@@ -17,6 +17,28 @@ function devdraw() {
 		get: (b,o) => String.fromCharCode(U8.get(b,o)),
 		put: (b,c,o) => U8.put(b,c.charCodeAt(0),o)
 	};
+	function coord1(p){
+		let b = p.get(1)[0];
+		let x = b & 0x7f;
+		if(b & 0x80){
+			x |= p.get(1)[0] << 7;
+			x |= p.get(1)[0] << 15;
+			if(x & (1<<22))
+				x |= ~0<<23;
+			return oldx => x;
+		}else{
+			if(b & 0x40)
+				x |= ~0<<7;
+			return oldx => x + oldx;
+		}
+	}
+	const coord = {
+		get: (p,o) => {
+			let a = coord1(p);
+			let b = coord1(p);
+			return old => ({x: a(old.x), y: b(old.y)});
+		}
+	};
 	const point = Struct(['x', u32, 'y', u32]);
 	const rect = Struct(['min', point, 'max', point]);
 	const msgFmt = Struct([
@@ -25,19 +47,29 @@ function devdraw() {
 			A: Struct(['id', u32, 'imageid', u32, 'fillid', u32, 'public', u8]),
 			b: Struct(['id', u32, 'screenid', u32, 'refresh', u8, 'chan', u32, 'repl', u8, 'r', rect, 'clipr', rect, 'color', u32]),
 			c: Struct(['id', u32, 'repl', u8, 'clipr', rect]),
+			D: Struct(['debugon', u8]),
 			d: Struct(['dstid', u32, 'srcid', u32, 'maskid', u32, 'dstr', rect, 'srcp', point, 'maskp', point]),
+			e: Struct(['dstid', u32, 'srcid', u32, 'c', point, 'a', u32, 'b', u32, 'thick', u32, 'sp', point, 'alpha', u32, 'phi', u32]),
+			E: Struct(['dstid', u32, 'srcid', u32, 'c', point, 'a', u32, 'b', u32, 'thick', u32, 'sp', point, 'alpha', u32, 'phi', u32]),
 			f: Struct(['id', u32]),
 			F: Struct(['id', u32]),
 			i: Struct(['id', u32,  'n', u32, 'ascent', u8]),
-			O: Struct(['op', u8]),
-			v: Struct([]),
-			y: Struct(['id', u32, 'r', rect]),
-			Y: Struct(['id', u32, 'r', rect]),
 			l: Struct(['cacheid', u32, 'srcid', u32, 'index', u16, 'r', rect, 'sp', point, 'left', u8, 'width', u8]),
-			s: Struct(['dstid', u32, 'srcid', u32, 'fontid', u32, 'p', point, 'clipr', rect, 'sp', point, 'index', Array(u16, u16)]),
-			n: Struct(['id', u32, 'name', VariableString(u8)]),
+			L: Struct(['dstid', u32, 'p0', point, 'p1', point, 'end0', u32, 'end1', u32, 'thick', u32, 'srcid', u32, 'sp', point]),
 			N: Struct(['id', u32, 'in', u8, 'name', VariableString(u8)]),
-			x: Struct(['dstid', u32, 'srcid', u32, 'fontid', u32, 'dp', point, 'clipr', rect, 'sp', point, 'bgid', u32, 'bp', point, 'index', Array(u16, u16)]),
+			n: Struct(['id', u32, 'name', VariableString(u8)]),
+			o: Struct(['id', u32, 'rmin', point, 'scr', point]),
+			O: Struct(['op', u8]),
+			p: Struct(['dstid', u32, 'n', u16, 'X0', u32, 'X1', u32, 'X2', u32, 'srcid', u32, 'sp', point, 'dp', FnArray(o => o.n+1, coord)]),
+			P: Struct(['dstid', u32, 'n', u16, 'X0', u32, 'X1', u32, 'X2', u32, 'srcid', u32, 'sp', point, 'dp', FnArray(o => o.n+1, coord)]),
+			r: Struct(['id', u32, 'r', rect]),
+			s: Struct(['dstid', u32, 'srcid', u32, 'fontid', u32, 'p', point, 'clipr', rect, 'sp', point, 'index', NArray(u16, u16)]),
+			S: Struct(['id', u32, 'chan', u32]),
+			t: Struct(['top', u8, 'id', NArray(u16, u32)]),
+			v: Struct([]),
+			x: Struct(['dstid', u32, 'srcid', u32, 'fontid', u32, 'dp', point, 'clipr', rect, 'sp', point, 'n', u16, 'bgid', u32, 'bp', point, 'index', FnArray(o=>o.n, u16)]),
+			Y: Struct(['id', u32, 'r', rect]),
+			y: Struct(['id', u32, 'r', rect])
 		})
 	]);
 
@@ -51,35 +83,54 @@ function devdraw() {
 			return f(buf);
 		});
 	}
+	function withPoints(p, f){
+		return withBuf(8 * p.length, buf => {
+			Module.HEAPU32.set(p.map(x=>[x.x,x.y]).flat(), buf>>2);
+			return f(buf);
+		});
+	}
 	function withRectangle(r, f){
 		return withBuf(16, buf => {
 			Module.HEAPU32.set([r.min.x, r.min.y, r.max.x, r.max.y], buf>>2);
 			return f(buf);
 		});
 	}
-	function withRectangleP(r, f){
-		return withBufP(16, buf => {
-			Module.HEAPU32.set([r.min.x, r.min.y, r.max.x, r.max.y], buf>>2);
-			return f(buf);
-		});
-	}
 
-	function Screen(image, fill, public) {
+	function Screen(image, fill, public, owner) {
+		this.ref = 1;
 		this.C = C.mallocz(4*4, 1);
+		image.ref++;
+		fill.ref++;
+		this.image = image;
+		this.fill = fill;
+		this.public = public;
+		this.owner = owner;
 		Module.HEAPU32.set([image.C, fill.C], (this.C>>2) + 2);
 	}
+	Screen.prototype.free = function() {
+		if(--this.ref == 0){
+			this.image.free();
+			this.fill.free();
+			C.free(this.C);
+			delete this.C;
+		}
+	};
 	function Image(m, screen) {
+		this.ref = 1;
 		this.id = m.id;
 		this.refresh = m.refresh;
 		this.chan = m.chan;
 		this.r = m.r;
 		if(m.screenid != 0){
+			screen.ref++;
 			this.layer = true;
+			this.screen = screen;
 			if(m.repl) throw new Error("no repl on screen");
 			this.C = withRectangle(m.r, r => C.memlalloc(screen.C, r, 0, 0, m.color));
 			if(!this.C) throw new Error("memlalloc: " + errstr());
 		}else{
 			this.layer = false;
+			this.screen = null;
 			this.C = withRectangle(m.r, r => C.allocmemimage(r, this.chan));
 			if(!this.C) throw new Error("allocmemimage: " + errstr());
 			if(m.color !== DNofill)
@@ -89,26 +140,32 @@ function devdraw() {
 	}
 	Image.prototype.cliprepl = function(repl, clipr) {
 		this.clipr = clipr;
+		this.repl = repl;
 		if(repl)
 			C.memimageflags(this.C, Frepl, 0);
+		else
+			C.memimageflags(this.C, 0, Frepl);
 		Module.HEAPU32.set([clipr.min.x, clipr.min.y, clipr.max.x, clipr.max.y], (this.C>>2)+4);
 	}
 	Image.prototype.free = function() {
-		if(this.layer)
+		if(--this.ref > 0) return;
+		if(this.layer){
+			this.screen.free();
 			C.memldelete(this.C);
-		else
+		}else
 			C.freememimage(this.C);
-		this.C = 0;
+		delete this.C;
 	}
-	Image.prototype.load = function(r, compressed, src) {
-		return withRectangleP(r, Cr =>
-			src.read(b => {
-				if(b.length == 0) return -1;
-				return withBuf(b.length, (buf, buf_array) => {
-					buf_array.set(b);
-					return C.memload(this.C, Cr, buf, b.length, compressed|0);
-				});
-			}));
+	Image.prototype.load = function(r, compressed, b) {
+		return withRectangle(r, Cr => {
+			if(b.rp >= b.p) return new Error('short read');
+			return withBuf(b.p - b.rp, (buf, buf_array) => {
+				buf_array.set(b.a.subarray(b.rp, b.p));
+				let n = C.memload(this.C, Cr, buf, b.p - b.rp, compressed|0);
+				if(n < 0) return new Error('bad writeimage call');
+				b.rp += n;
+			});
+		});
 	};
 	Image.prototype.unload = function(r) {
 		if(r == undefined) r = this.r;
@@ -128,13 +185,60 @@ function devdraw() {
 			C.memdraw(this.C, Cdstr, src.C, Csrcp, mask === null ? 0 : mask.C, Cmaskp, op)
 		)));
 	}
-	var gscreen = new Image({
+	Image.prototype.origin = function(rmin, scr) {
+		if(!this.layer) return;
+		withPoint(rmin, Crmin =>
+		withPoint(scr, Cscr =>
+			C.memlorigin(this.C, Crmin, Cscr)
+		));
+	}
+	Image.prototype.ellipse = function(src, c, a, b, thick, sp, alpha, phi, fill, op){
+		withPoint(c, Cc =>
+		withPoint(sp, Csp => {
+			if(fill) thick = -1;
+			if(alpha & (1<<31)){
+				alpha = alpha << 1 >> 1;
+				C.memarc(this.C, Cc, a, b, thick, src.C, Csp, alpha, phi, op);
+			}else
+				C.memellipse(this.C, Cc, a, b, thick, src.C, Csp, op);
+		}));
+	}
+	Image.prototype.line = function(src, p0, p1, end0, end1, thick, sp, op){
+		withPoint(p0, Cp0 =>
+		withPoint(p1, Cp1 =>
+		withPoint(sp, Csp =>
+			C.memline(this.C, Cp0, Cp1, end0, end1, thick, src.C, Csp, op)
+		)));
+	}
+	Image.prototype.poly = function(src, x0, x1, x2, sp, dp, fill, op){
+		let l = {x:0, y:0};
+		for(let i = 0; i < dp.length; i++)
+			dp[i] = l = dp[i](l);
+		withPoint(sp, Csp =>
+		withPoints(dp, Cdp => {
+			if(fill)
+				C.memfillpoly(this.C, Cdp, dp.length, x0, src.C, Csp, op);
+			else
+				C.mempoly(this.C, Cdp, dp.length, x0, x1, x2, src.C, Csp, op);
+		}));
+	}
+	function wintop(w, top){
+		withBuf(w.length * 4, buf => {
+			Module.HEAPU32.set(w.map(x=>x.C), buf>>2);
+			if(top)
+				C.memltofrontn(buf, w.length);
+			else
+				C.memltorearn(buf, w.length);
+		});
+	}
+	var display = new Image({
 		id: 0,
 		r: displayRect,
 		clipr: displayRect,
 		chan: 0x48281808,
 		fill: 0xFF,
-		screenid: 0
+		screenid: 0,
+		repl: 0
 	});
 	function Font(img, n, ascent) {
 		img.font = this;
@@ -153,7 +257,7 @@ function devdraw() {
 		r.min.x = p.x;
 		r.min.y = p.y - fontimg.font.ascent;
 		r.max.x = p.x;
-		r.max.y = p.y + (fontimg.r.max.y - fontimg.r.min.y);
+		r.max.y = r.min.y + (fontimg.r.max.y - fontimg.r.min.y);
 		for(var i = 0; i < index.length; i++)
 			r.max.x += fontimg.font.chars[index[i]].width;
 		this.draw(bg, null, r, bp, {x:0,y:0}, op);
@@ -176,10 +280,11 @@ function devdraw() {
 		Module.HEAPU32.set([this.clipr.min.x, this.clipr.min.y, this.clipr.max.x, this.clipr.max.y], (this.C>>2)+4);
 	}
 	function flush() {
-		let p = withPoint(gscreen.r.min, p => C.byteaddr(gscreen.C, p));
+		let p = withPoint(display.r.min, p => C.byteaddr(display.C, p));
 		imageData.data.set(Module.HEAPU8.subarray(p, p + displayRect.max.x * displayRect.max.y * 4));
 		ctx.putImageData(imageData, 0, 0);
 	}
+	var allscreens = {};
 	_new.open = function(fid) {
 		var num = ids++;
 		var dir = new File(num.toString(), QTDIR, top);
@@ -188,112 +293,178 @@ function devdraw() {
 		var data = new File('data', 0, dir);
 		var colormap = new File('colormap', 0, dir);
 		var refresh = new File('refresh', 0, dir);
-		
-		var queue = new Packet();
+
 		var drawop = SoverD;
 		
-		var images = {0: gscreen};
-		var screens = {};
+		var images = {0: display};
+		var myscreens = {};
+		var infoid = 0;
 
 		ctl.read = function(fid, count, offset){
-			var str = [num, 0, 'r8g8b8', 0, 0, 0, 1024, 768, 0, 0, 1024, 768].map(n => n.toString().padStart(11)).join(' ') + ' ';
+			let w = images[infoid];
+			var str = [
+					num, w.id, 'r8g8b8a8', w.repl,
+					w.r.min.x, w.r.min.y, w.r.max.x, w.r.max.y,
+					w.clipr.min.x, w.clipr.min.y, w.clipr.max.x, w.clipr.max.y
+				].map(n => n.toString().padStart(11)).join(' ') + ' ';
 			return str.substr(offset, count);
 		};
-		data.write = function(fid, data, offset){
-			queue.write(data);
-		}
-		function recvMsg() {
-			function msglen(b){
-				if(b.length == 0) return -1;
-				switch(String.fromCharCode(b[0])){
-				case 'A': return 1 + 4 + 4 + 4 + 1;
-				case 'b': return 1 + 4 + 4 + 1 + 4 + 1 + 4*4 + 4*4 + 4;
-				case 'c': return 1 + 4 + 1 + 4*4;
-				case 'd': return 1 + 4 + 4 + 4 + 4*4 + 2*4 + 2*4;
-				case 'D': return 1 + 1;
-				case 'e': return 1 + 4 + 4 + 2*4 + 4 + 4 + 4 + 2*4 + 4 + 4;
-				case 'E': return 1 + 4 + 4 + 2*4 + 4 + 4 + 4 + 2*4 + 4 + 4;
-				case 'f': return 1 + 4;
-				case 'F': return 1 + 4;
-				case 'i': return 1 + 4 + 4 + 1;
-				case 'l': return 1 + 4 + 4 + 2 + 4*4 + 2*4 + 1 + 1;
-				case 'L': return 1 + 4 + 2*4 + 2*4 + 4 + 4 + 4 + 4 + 2*4;
-				case 'N': {
-					let h = 1 + 4 + 1 + 1;
-					if(b.length < h) return -1;
-					let n = h + b[h-1];
-					return n;
+		ctl.write = function(fid, data, offset){
+			throw new Error("...");
+		};
+		function processmsg(m, buf) {
+			console.log(m);
+			switch(m.type){
+			case 'A':
+				if(m.id in allscreens) return new Error('screen id reused');
+				if(!(m.imageid in images)) return new Error('no such image');
+				if(!(m.fillid in images)) return new Error('no such image');
+				myscreens[m.id] = allscreens[m.id] = new Screen(images[m.imageid], images[m.fillid], m.public, num);
+				break;
+			case 'b':
+				if(m.id in images) return new Error('image id reused');
+				if(m.screenid != 0 && !(m.screenid in myscreens)) return new Error('no such screen');
+				images[m.id] = new Image(m, myscreens[m.screenid]);
+				break;
+			case 'c':
+				if(!(m.id in images)) return new Error('no such image');
+				images[m.id].cliprepl(m.repl, m.clipr);
+				break;
+			case 'd':
+				if(!(m.dstid in images)) return new Error('no such image');
+				if(!(m.srcid in images)) return new Error('no such image');
+				if(!(m.maskid in images)) return new Error('no such image');
+				images[m.dstid].draw(images[m.srcid], images[m.maskid], m.dstr, m.srcp, m.maskp, drawop);
+				break;
+			case 'D':
+				break;
+			case 'e':
+			case 'E':
+				if(!(m.dstid in images)) return new Error('no such image');
+				if(!(m.srcid in images)) return new Error('no such image');
+				if(m.a < 0 || m.b < 0) return new Error('invalid ellipse semidiameter');
+				if(m.thick < 0) return new Error('invalid ellipse thickness');
+				images[m.dstid].ellipse(images[m.srcid], m.c, m.a, m.b, m.thick, m.sp, m.alpha, m.phi, m.type == 'E', drawop);
+				break;
+			case 'f':
+				if(!(m.id in images)) return new Error('no such image');
+				images[m.id].free();
+				delete images[m.id];
+				break;
+			case 'F':
+				if(!(m.id in myscreens)) return new Error('no such image');
+				myscreens[m.id].free();
+				delete myscreens[m.id];
+				if(myscreens[m.id].owner == num)
+					delete allscreens[m.id];
+				break;
+			case 'i':
+				if(!(m.id in images)) return new Error('no such image');
+				new Font(images[m.id], m.n, m.ascent);
+				break;
+			case 'L':
+				if(!(m.dstid in images)) return new Error('no such image');
+				if(!(m.srcid in images)) return new Error('no such image');
+				images[m.dstid].line(images[m.srcid], m.p0, m.p1, m.end0, m.end1, m.thick, m.sp, drawop);
+				break;
+			case 'l':
+				if(!(m.cacheid in images)) return new Error('no such image');
+				if(!(m.srcid in images)) return new Error('no such image');
+				if(images[m.cacheid].font === undefined) return new Error('not a font');
+				images[m.cacheid].font.load(images[m.srcid], m.index, m.r, m.sp, m.left, m.width);
+				break;
+			case 's':
+				if(!(m.dstid in images)) return new Error('no such image');
+				if(!(m.srcid in images)) return new Error('no such image');
+				if(!(m.fontid in images)) return new Error('no such image');
+				if(images[m.fontid].font === undefined) return new Error('not a font');
+				images[m.dstid].string(images[m.srcid], images[m.fontid], m.p, m.clipr, m.sp, m.index, drawop);
+				break;
+			case 'N': {
+				if(!(m.id in images)) return new Error('no such image');
+				if(m.in){
+					publicImages[m.name] = images[m.id];
+					images[m.id].ref++;
+				}else{
+					publicImages[m.name].free();
+					delete publicImages[m.name];
 				}
-				case 'n': {
-					let h = 1 + 4 + 1;
-					if(b.length < h) return -1;
-					let n = h + b[h-1];
-					return n;
-				}
-				case 'o': return 1 + 4 + 2*4 + 2*4;
-				case 'O': return 1 + 1;
-				//case 'p': return 1 + 4 + 2 + 4 + 4 + 4 + 4 + 2*4 + 2*2*(n+1);
-				//case 'P': return 1 + 4 + 2 + 4 + 2*4 + 4 + 2*4 + 2*2*(n+1);
-				case 'r': return 1 + 4 + 4*4;
-				case 's': {
-					let h = 1 + 4 + 4 + 4 + 2*4 + 4*4 + 2*4 + 2;
-					if(b.length < h) return -1;
-					let n = h + 2 * (b[h-2] | b[h-1] << 8);
-					return n;
-				}
-				case 'x': {
-					let h = 1 + 4 + 4 + 4 + 2*4 + 4*4 + 2*4 + 2;
-					if(b.length < h) return -1;
-					let n = h + 2 * (b[h-2] | b[h-1] << 8) + 4 + 2*4;
-					return n;
-				}
-				case 'S': return 1 + 4 + 4;
-				case 't': return 1 + 1 + 2 + 4;
-				case 'v': return 1;
-				case 'y': return 1 + 4 + 4*4;
-				case 'Y': return 1 + 4 + 4*4;
-				default:
-					throw new Error('msglen: unknown draw message ' + String.fromCharCode(b[0]));
-				}
+				break;
 			}
-			queue.read(msglen)
-			.then(b => {
-				if(b[0] == 120){ /* x is stupid */
-					let h = 1 + 4 + 4 + 4 + 2*4 + 4*4 + 2*4;
-					let r = b.slice(h, h+2);
-					b.copyWithin(h, h+2, h+2+4+2*4);
-					b.set(r, h+4+2*4);
+			case 'n':
+				if(!(m.name in publicImages)) return new Error('no such image');
+				if(m.id in images) return new Error('image id reused');
+				infoid = m.id;
+				images[m.id] = publicImages[m.name];
+				images[m.id].ref++;
+				break;
+			case 'O':
+				drawop = m.op;
+				break;
+			case 'o':
+				if(!(m.id in images)) return new Error('no such image');
+				images[m.id].origin(m.rmin, m.scr);
+				break;
+			case 'p':
+			case 'P':
+				if(!(m.dstid in images)) return new Error('no such image');
+				if(!(m.srcid in images)) return new Error('no such image');
+				images[m.dstid].poly(images[m.srcid], m.X0, m.X1, m.X2, m.sp, m.dp, m.type == 'P', drawop);
+				break;
+			case 'S':
+				let s = allscreens[m.id];
+				if(s === undefined || !s.public && s.owner !== num) return new Error('no such screen');
+				if(s.image.chan !== m.chan) return new Error('inconsistent chan');
+				if(s.owner !== num){
+					myscreens[m.id] = s;
+					s.ref++;
 				}
-				return unpack(msgFmt, b);
-			}).then(m => {
-				console.log(m);
-				switch(m.type){
-				case 'A': screens[m.id] = new Screen(images[m.imageid], images[m.fillid], m.public); break;
-				case 'b': images[m.id] = new Image(m, screens[m.screenid]); break;
-				case 'c': images[m.id].cliprepl(m.repl, m.clipr); break;
-				case 'd': images[m.dstid].draw(images[m.srcid], images[m.maskid], m.dstr, m.srcp, m.maskp, drawop); break;
-				case 'f': images[m.id].free(); delete images[m.id]; break;
-				case 'y': return images[m.id].load(m.r, false, queue); break;
-				case 'Y': return images[m.id].load(m.r, true, queue); break;
-				case 'O': drawop = m.op; break;
-				case 'v': flush(); break;
-				case 'i': new Font(images[m.id], m.n, m.ascent); break;
-				case 'l': images[m.cacheid].font.load(images[m.srcid], m.index, m.r, m.sp, m.left, m.width); break;
-				case 's': images[m.dstid].string(images[m.srcid], images[m.fontid], m.p, m.clipr, m.sp, m.index, drawop); break;
-				case 'x': images[m.dstid].stringbg(images[m.srcid], images[m.fontid], m.dp, m.clipr, m.sp, m.index, images[m.bgid], m.bp, drawop); break;
-				case 'N': {
-					if(m.in)
-						publicImages[m.name] = images[m.id];
-					else
-						delete publicImages[m.name];
-					break;
+				break;
+			case 't': {
+				let w = new Array(m.id.length);
+				for(let i = 0; i < m.id.length; i++){
+					w[i] = images[m.id];
+					if(w[i] === undefined) return new Error('no such image');
+					if(!w[i].layer) return new Error('not a window');
+					if(i > 0 && w[i].screen !== w[i-1].screen)
+						return new Error('images not on same screen');
 				}
-				case 'n': images[m.id] = publicImages[m.name]; break;
-				default: throw new Error('recvMsg: unknown draw message ' + m.type);
-				}
-			})
-			.then(recvMsg);
+				wintop(w, top);
+				break;
+			}
+			case 'v':
+				flush();
+				break;
+			case 'x':
+				if(!(m.dstid in images)) return new Error('no such image');
+				if(!(m.srcid in images)) return new Error('no such image');
+				if(!(m.fontid in images)) return new Error('no such image');
+				if(!(m.bgid in images)) return new Error('no such image');
+				if(images[m.fontid].font === undefined) return new Error('not a font');
+				images[m.dstid].stringbg(images[m.srcid], images[m.fontid], m.dp, m.clipr, m.sp, m.index, images[m.bgid], m.bp, drawop);
+				break;
+			case 'y':
+			case 'Y':
+				if(!(m.id in images)) return new Error('no such image');
+				return images[m.id].load(m.r, m.type == 'Y', buf);
+			default:
+				throw new Error('recvMsg: unknown draw message ' + m.type);
+			}
 		}
-		recvMsg();
+		data.write = function(fid, data, offset){
+			let b = new VBuffer(data);
+			var m, e;
+			while(b.rp < b.p){
+				let n = b.rp;
+				try{
+					m = msgFmt.get(b);
+				}catch(e){
+					return n == 0 ? e : n;
+				}
+				e = processmsg(m, b);
+				if(e !== undefined)
+					return n == 0 ? e : n;
+			}
+		};
 	};
 }

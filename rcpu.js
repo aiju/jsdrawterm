@@ -455,7 +455,15 @@ Module['onRuntimeInitialized'] = () => {
 		rerrstr: Module.cwrap('rerrstr', null, ['number', 'number']),
 		memimageflags: Module.cwrap('memimageflags', 'number', ['number', 'number', 'number']),
 		memldelete: Module.cwrap('memldelete', null, ['number']),
-		freememimage: Module.cwrap('freememimage', null, ['number'])
+		freememimage: Module.cwrap('freememimage', null, ['number']),
+		memlorigin: Module.cwrap('memlorigin', null, ['number', 'number', 'number']),
+		memellipse: Module.cwrap('memellipse', null, ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number']),
+		memarc: Module.cwrap('memellipse', null, ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number', 'number', 'number']),
+		memline: Module.cwrap('memline', null, ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number', 'number']),
+		mempoly: Module.cwrap('mempoly', null, ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number', 'number']),
+		memfillpoly: Module.cwrap('memfillpoly', null, ['number', 'number', 'number', 'number', 'number', 'number', 'number']),
+		memltofrontn: Module.cwrap('memltofrontn', null, ['number', 'number']),
+		memltorearn: Module.cwrap('memltofrontn', null, ['number', 'number']),
 	};
 	document.getElementById('console').onkeydown = input;
 	document.getElementById('canvas').onmouseup = mouse;

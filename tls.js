@@ -151,7 +151,7 @@ function Length(count,data,offset) {
 		}
 	};
 }
-function Array(count,data) {
+function NArray(count,data) {
 	return {
 		put: (b,l,o) => {
 			count.put(b, l.length);
@@ -161,6 +161,23 @@ function Array(count,data) {
 		get: (b,o) => {
 			let l = [];
 			let c = count.get(b, o);
+			for(var i = 0; i < c; i++)
+				l.push(data.get(b, o));
+			return l;
+		}
+	};
+}
+function FnArray(countfn,data) {
+	return {
+		put: (b,l,o) => {
+			if(l.length !== countfn(o))
+				throw new Error('inconsistent object');
+			for(var i = 0; i < l.length; i++)
+				data.put(b, l[i], o);
+		},
+		get: (b,o) => {
+			let l = [];
+			let c = countfn(o);
 			for(var i = 0; i < c; i++)
 				l.push(data.get(b, o));
 			return l;

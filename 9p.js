@@ -216,8 +216,8 @@ function NineP(chan){
 	const Tattach = Struct(['fid', u32, 'afid', u32, 'uname', string,'aname', string]);
 	const Rattach = Struct(['qid', qid]);
 	const Rerror = Struct(['ename', string]);
-	const Twalk = Struct(['fid', u32, 'newfid', u32, 'wname', Array(u16, string)]);
-	const Rwalk = Struct(['wqid', Array(u16, qid)]);
+	const Twalk = Struct(['fid', u32, 'newfid', u32, 'wname', NArray(u16, string)]);
+	const Rwalk = Struct(['wqid', NArray(u16, qid)]);
 	const Tclunk = Struct(['fid', u32]);
 	const Rclunk = Struct([]);
 	const Topen = Struct(['fid', u32, 'mode', u8]);
