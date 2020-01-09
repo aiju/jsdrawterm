@@ -107,7 +107,6 @@ function devdraw() {
 		Module.HEAPU32.set([image.C, fill.C], (this.C>>2) + 2);
 	}
 	Screen.prototype.free = function() {
-		console.log('decref ' + this.id + ' ' + (this.ref-1));
 		if(this.ref <= 0) throw new Error('refcounting botch');
 		if(--this.ref == 0){
 			this.image.free();
@@ -116,7 +115,7 @@ function devdraw() {
 			delete this.C;
 		}
 	};
-	Screen.prototype.incref = function() { this.ref++; console.log('incref ' + this.id + ' ' + this.ref); };
+	Screen.prototype.incref = function() { this.ref++; };
 	function Image(m, screen) {
 		this.ref = 1;
 		this.id = m.id;
@@ -143,12 +142,12 @@ function devdraw() {
 		}
 		this.cliprepl(m.repl, m.clipr);
 	}
-	Image.prototype.incref = function() { this.ref++; console.log('image incref ' + this.id + ' ' + this.ref); };
+	Image.prototype.incref = function() { this.ref++; };
 	Image.prototype.free = function() {
-		console.log('image decref ' + this.id + ' ' + (this.ref - 1)); 
 		if(this.ref <= 0) throw new Error('refcounting botch');
 		if(--this.ref > 0) return;
-		if(this.name !== undefined) throw new Error('freeing named image -- shouldn\'t happen');
+		if(this.name !== undefined)
+			deregister(name, this);
 		if(this.layer){
 			C.memldelete(this.C);
 			this.screen.free();
@@ -249,7 +248,8 @@ function devdraw() {
 		canvas.height = h;
 		displayRect.max.x = w;
 		displayRect.max.y = h;
-		if(display) display.free();
+		if(display)
+			display.free();
 		display = new Image({
 			id: 0,
 			r: displayRect,
@@ -262,11 +262,11 @@ function devdraw() {
 		});
 		register("screen.noborder." + displayidx++, display);
 		imageData = ctx.createImageData(w, h);
+		conspaint();
 		mouseresize();
 	}
 	let resizeTimer;
 	function resizeEvent(event) {
-		console.log(event);
 		if(resizeTimer)
 			clearTimeout(resizeTimer);
 		resizeTimer = setTimeout(resize, 250);
@@ -274,20 +274,16 @@ function devdraw() {
 	
 	var publicImages = {};
 	function register(name, img) {
-		if(name in publicImages) return new Error("name used");
+		if(name in publicImages) return new Error("image name in use");
 		if(img.name !== undefined) return new Error("image already has a name");
-		console.log("register " + name);
-		img.incref();
 		img.name = name;
 		publicImages[name] = img; 
 	}
 	function deregister(name, img) {
 		if(!(name in publicImages)) return new Error("no such name");
 		if(publicImages[name] !== img) return new Error("wrong name");
-		console.log("deregister " + name);
 		delete publicImages[name];
 		delete img.name;
-		img.decref();
 	}
 
 	const winname = new File("winname", 0, dev);
