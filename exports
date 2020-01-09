@@ -22,7 +22,7 @@ memload
 memunload
 memdraw
 byteaddr
-memlalloc
+memlalloc0
 rerrstr
 memimageflags
 memldelete

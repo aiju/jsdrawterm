@@ -123,6 +123,8 @@ function devdraw() {
 		this.ref = 1;
 		this.id = m.id;
 		this.refresh = m.refresh;
+		if(m.refresh != 0 && m.refresh != 1)
+			throw new Error("unknown refresh method " + m.refresh);
 		this.chan = m.chan;
 		this.r = m.r;
 		if(m.screenid != 0){
@@ -130,7 +132,7 @@ function devdraw() {
 			this.layer = true;
 			this.screen = screen;
 			if(m.repl) throw new Error("no repl on screen");
-			this.C = withRectangle(m.r, r => C.memlalloc(screen.C, r, 0, 0, m.color));
+			this.C = withRectangle(m.r, r => C.memlalloc0(screen.C, r, m.refresh == 0, m.color));
 			if(!this.C) throw new Error("memlalloc: " + errstr());
 		}else{
 			this.layer = false;
@@ -255,7 +257,8 @@ function devdraw() {
 			chan: 0x48281808,
 			fill: 0xFF,
 			screenid: 0,
-			repl: 0
+			repl: 0,
+			refresh: 0
 		});
 		display.name = "screen.noborder." + displayidx++;
 		publicImages[display.name] = display;

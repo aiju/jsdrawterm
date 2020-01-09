@@ -52,7 +52,7 @@ Module['onRuntimeInitialized'] = () => {
 		setupChachastate: Module.cwrap('setupChachastate', null, ['number', 'number', 'number', 'number', 'number', 'number']),
 		sha2_256: Module.cwrap('sha2_256', 'number', ['array', 'number', 'number', 'number']),
 		memimageinit: Module.cwrap('memimageinit', null, []),
-		memlalloc: Module.cwrap('memlalloc', 'number', ['number', 'number', 'number', 'number', 'number']),
+		memlalloc0: Module.cwrap('memlalloc0', 'number', ['number', 'number', 'number', 'number']),
 		allocmemimage: Module.cwrap('allocmemimage', 'number', ['number', 'number']),
 		memfillcolor: Module.cwrap('memfillcolor', null, ['number', 'number']),
 		memload: Module.cwrap('memload', 'number', ['number', 'number', 'number', 'number', 'number']),

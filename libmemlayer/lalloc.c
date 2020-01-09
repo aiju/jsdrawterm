@@ -77,3 +77,9 @@ memlalloc(Memscreen *s, Rectangle screenr, Refreshfn refreshfn, void *refreshptr
 	}
 	return n;
 }
+
+Memimage*
+memlalloc0(Memscreen *s, Rectangle screenr, int backing, ulong val)
+{
+	return memlalloc(s, screenr, backing ? nil : memlnorefresh, nil, val);
+}
