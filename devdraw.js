@@ -167,7 +167,7 @@ function devdraw() {
 		return withRectangle(r, Cr => {
 			if(b.rp >= b.p) return new Error('short read');
 			return withBuf(b.p - b.rp, (buf, buf_array) => {
-				buf_array.set(b.a.subarray(b.rp, b.p));
+				buf_array().set(b.a.subarray(b.rp, b.p));
 				let n = C.memload(this.C, Cr, buf, b.p - b.rp, compressed|0);
 				if(n < 0) return new Error('bad writeimage call');
 				b.rp += n;
@@ -182,7 +182,7 @@ function devdraw() {
 				let m = C.memunload(this.C, Cr, buf, n);
 				if(m < 0)
 					throw new Error('memunload: ' + errstr());
-				return buf_array.slice(0, m);
+				return buf_array().slice(0, m);
 			}));
 	}
 	Image.prototype.draw = function(src, mask, dstr, srcp, maskp, op) {

@@ -94,29 +94,29 @@ function asrdresp(chan, len)
 function convM2T(b, key)
 {
 	return withBufP(TICKETLEN, (buf, buf_array) => {
-		buf_array.set(b);
+		buf_array().set(b);
 		if(C.form1M2B(buf, TICKETLEN, key) < 0)
 			throw new Error("?password mismatch with auth server");
-		return unpack(Ticket, buf_array.slice());
+		return unpack(Ticket, buf_array().slice());
 	});
 }
 
 function convA2M(s, key)
 {
 	return withBuf(AUTHENTLEN, (buf, buf_array) => {
-		buf_array.set(pack(Authenticator, s).data());
+		buf_array().set(pack(Authenticator, s).data());
 		C.form1B2M(buf, 1 + CHALLEN + NONCELEN, key);
-		return buf_array.slice();
+		return buf_array().slice();
 	});
 }
 
 function convM2A(b, key)
 {
 	return withBuf(AUTHENTLEN, (buf, buf_array) => {
-		buf_array.set(b);
+		buf_array().set(b);
 		if(C.form1M2B(buf, AUTHENTLEN, key) < 0)
 			throw new Error("?you and auth server agree about password. ?server is confused.");
-		return unpack(Authenticator, buf_array.slice());
+		return unpack(Authenticator, buf_array().slice());
 	});
 }
 
@@ -129,11 +129,11 @@ function getastickets(authkey, tr)
 			return chan.write(pack(Ticketreq, tr).data())
 			.then(() => {
 				C.authpak_new(priv, authkey, ybuf, 1);
-				return chan.write(ybuf_array);
+				return chan.write(ybuf_array());
 			}).then(() => asrdresp(chan, 2*PAKYLEN)
 			).then(buf => {
 				tr.paky.set(buf.subarray(0, PAKYLEN));
-				ybuf_array.set(buf.subarray(PAKYLEN));
+				ybuf_array().set(buf.subarray(PAKYLEN));
 				if(C.authpak_finish(priv, authkey, ybuf))
 					throw new Error("getastickets failure");
 				tr.type = AuthTreq;
@@ -187,9 +187,9 @@ function dp9ik(chan, dom) {
 				suid: cticket.suid,
 				cuid: cticket.cuid,
 			};
-			ai.secret = withBuf(256, (secret, secret_buf) => {
+			ai.secret = withBuf(256, (secret, secret_array) => {
 				C.hkdf_x_plan9(crand, cticket.key, secret);
-				return secret_buf.slice();
+				return secret_array().slice();
 			});
 			return ai;
 		})

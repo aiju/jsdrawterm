@@ -81,7 +81,7 @@ function tlsClient(chan, psk) {
 	nullCipher.prototype.encrypt = function(f){};
 	function aeadChacha20Poly1305(mackey, key, iv){
 		this.iv = iv;
-		this.iv_array = Module.HEAPU8.subarray(this.iv, this.iv+12);
+		this.iv_array = () => Module.HEAPU8.subarray(this.iv, this.iv+12);
 		this.state = C.mallocz(26 * 4, 1);
 		C.setupChachastate(this.state, key, 32, iv, 12, 20);
 	}
@@ -91,27 +91,27 @@ function tlsClient(chan, psk) {
 	aeadChacha20Poly1305.prototype.decrypt = function(f){
 		let nonce = new Uint8Array(12);
 		for(var i = 0; i < 12; i++)
-			nonce[i] = f.recnum / 2**(8*(11-i)) & 255 ^ this.iv_array[i];
+			nonce[i] = f.recnum / 2**(8*(11-i)) & 255 ^ this.iv_array()[i];
 		C.chacha_setiv(this.state, nonce);
 		f.length -= 16;
 		let aad = pack(AAD, f).data();
 		f.fragment = withBuf(f.fragment.length, (buf, buf_array) => {
-			buf_array.set(f.fragment);
+			buf_array().set(f.fragment);
 			if(C.ccpoly_decrypt(buf, f.length, aad, aad.length, buf + f.length, this.state) < 0)
 				throw new Error("bad MAC");
-			return buf_array.slice(0, f.length);
+			return buf_array().slice(0, f.length);
 		});
 	};
 	aeadChacha20Poly1305.prototype.encrypt = function(f){
 		let nonce = new Uint8Array(12);
 		for(var i = 0; i < 12; i++)
-			nonce[i] = f.recnum / 2**(8*(11-i)) & 255 ^ this.iv_array[i];
+			nonce[i] = f.recnum / 2**(8*(11-i)) & 255 ^ this.iv_array()[i];
 		C.chacha_setiv(this.state, nonce);
 		let aad = pack(AAD, f).data();
 		f.fragment = withBuf(f.fragment.length + 16, (buf, buf_array) => {
-			buf_array.set(f.fragment);
+			buf_array().set(f.fragment);
 			C.ccpoly_encrypt(buf, f.fragment.length, aad, aad.length, buf + f.fragment.length, this.state);
-			return buf_array.slice();
+			return buf_array().slice();
 		});
 	};
 
@@ -133,13 +133,16 @@ function tlsClient(chan, psk) {
 		var n = psk.length;
 		withBuf(2 * n + 4, (buf, buf_array) => 
 		withBuf(2 * RandomSize, (seed, seed_array) => {
-			buf_array[0] = n >> 8;
-			buf_array[1] = n;
-			buf_array[n+2] = n >> 8;
-			buf_array[n+3] = n;
-			buf_array.set(psk, n+4);
-			seed_array.set(crandom);
-			seed_array.set(srandom, RandomSize);
+			{
+				let a = buf_array();
+				a[0] = n >> 8;
+				a[1] = n;
+				a[n+2] = n >> 8;
+				a[n+3] = n;
+				a.set(psk, n+4);
+			}
+			seed_array().set(crandom);
+			seed_array().set(srandom, RandomSize);
 			let label = 'master secret';
 			C.p_sha256(masterSecret, MasterSecretSize, buf, 2 * n + 4, label, label.length, seed, 2 * RandomSize);
 		}));
@@ -164,8 +167,8 @@ function tlsClient(chan, psk) {
 		};
 		let label = 'key expansion';
 		withBuf(2 * RandomSize, (seed, seed_array) => {
-			seed_array.set(srandom);
-			seed_array.set(crandom, RandomSize);
+			seed_array().set(srandom);
+			seed_array().set(crandom, RandomSize);
 			C.p_sha256(sessionKeys.buf, n, masterSecret, MasterSecretSize, label, label.length, seed, 2 * RandomSize);
 		});	
 	}
@@ -333,7 +336,7 @@ function tlsClient(chan, psk) {
 			C.memmove(handhash + DigestStateSize, handhash, DigestStateSize);
 			C.sha2_256([], 0, hash, handhash + DigestStateSize);
 			C.p_sha256(data, 12, masterSecret, MasterSecretSize, label, label.length, hash, 32);
-			return data_array.slice();
+			return data_array().slice();
 		}));
 	}
 	function sendFinished() {

@@ -80,7 +80,7 @@ Module['onRuntimeInitialized'] = () => {
 
 function withBuf(n, f) {
 	var t = C.mallocz(n, 1);
-	var t_array = Module.HEAPU8.subarray(t, t + n);
+	var t_array = () => Module.HEAPU8.subarray(t, t + n);
 	try{
 		var r = f(t, t_array);
 		return r;
@@ -91,7 +91,7 @@ function withBuf(n, f) {
 }
 function withBufP(n, f){
 	var t = C.mallocz(n, 1);
-	var t_array = Module.HEAPU8.subarray(t, t + n);
+	var t_array = () => Module.HEAPU8.subarray(t, t + n);
 	return Promise.resolve(f(t, t_array)).finally(() => {
 		C.memset(t, 0, n);
 		C.free(t);
