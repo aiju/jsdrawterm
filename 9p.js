@@ -251,7 +251,7 @@ function NineP(chan){
 		if(ename === undefined || ename === null)
 			return sendMsg(this.ofcall);
 		else
-			return sendMsg({type: $Rerror, tag: this.tag, ename: ename.toString()});
+			return sendMsg({type: $Rerror, tag: this.tag, ename: ename.message});
 	}
 	function newReq(m) {
 		if(m.tag in tags){
