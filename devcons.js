@@ -1,5 +1,7 @@
 "use strict";
 
+var mouseresize;
+
 function devcons() {
 	const canvas = document.getElementById('canvas');
 	const ctx = canvas.getContext('2d');
@@ -162,6 +164,7 @@ function devcons() {
 	devzero.read = function(fid, count, offset){return new Uint8Array(count);}
 	devzero.write = function(fid, data, offset){}
 	
+	var mousestate = 'm' + [0, 0, 0, 0].map(s => s.toString().padStart(11)).join(' ') + ' ';
 	var mousereaders = [];
 	const devmouse = new File('mouse', 0, dev);
 	devmouse.read = function(fid, count, offset){
@@ -169,17 +172,22 @@ function devcons() {
 			mousereaders.push(s => resolve(s.substr(0, count)));
 		});
 	}
-	function mouse(event){
+	mouseresize = function(){
 		let f = mousereaders.shift();
-		if(f === undefined) return;
+		if(f !== undefined)
+			f('r' + mousestate.substr(1));
+	};
+	function mouse(event){
 		let rect = canvas.getBoundingClientRect()
-		let s = 'm' + [
+		let mousestate = 'm' + [
 				event.clientX - rect.left,
 				event.clientY - rect.top,
 				event.buttons & 1 | event.buttons >> 1 & 2 | event.buttons << 1 & 4,
 				event.timeStamp|0
 			].map(s => s.toString().padStart(11)).join(' ') + ' ';
-		f(s);
+		let f = mousereaders.shift();
+		if(f !== undefined)
+			f(mousestate);
 	}
 	canvas.addEventListener('mousedown', mouse);
 	canvas.addEventListener('mousemove', mouse);

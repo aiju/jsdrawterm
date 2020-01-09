@@ -1,7 +1,7 @@
 function devdraw() {
 	const canvas = document.getElementById('canvas');
 	const ctx = canvas.getContext('2d');
-	const imageData = ctx.createImageData(canvas.width, canvas.height);
+	var imageData;
 
 	const DNofill = 0xFFFFFF00;
 	const SoverD = 11;
@@ -96,11 +96,12 @@ function devdraw() {
 		});
 	}
 
-	function Screen(image, fill, public, owner) {
+	function Screen(id, image, fill, public, owner) {
+		this.id = id;
 		this.ref = 1;
 		this.C = C.mallocz(4*4, 1);
-		image.ref++;
-		fill.ref++;
+		image.incref();
+		fill.incref();
 		this.image = image;
 		this.fill = fill;
 		this.public = public;
@@ -108,6 +109,8 @@ function devdraw() {
 		Module.HEAPU32.set([image.C, fill.C], (this.C>>2) + 2);
 	}
 	Screen.prototype.free = function() {
+		console.log('decref ' + this.id + ' ' + (this.ref-1));
+		if(this.ref <= 0) throw new Error('refcounting botch');
 		if(--this.ref == 0){
 			this.image.free();
 			this.fill.free();
@@ -115,6 +118,7 @@ function devdraw() {
 			delete this.C;
 		}
 	};
+	Screen.prototype.incref = function() { this.ref++; console.log('incref ' + this.id + ' ' + this.ref); };
 	function Image(m, screen) {
 		this.ref = 1;
 		this.id = m.id;
@@ -122,7 +126,7 @@ function devdraw() {
 		this.chan = m.chan;
 		this.r = m.r;
 		if(m.screenid != 0){
-			screen.ref++;
+			screen.incref();
 			this.layer = true;
 			this.screen = screen;
 			if(m.repl) throw new Error("no repl on screen");
@@ -138,6 +142,7 @@ function devdraw() {
 		}
 		this.cliprepl(m.repl, m.clipr);
 	}
+	Image.prototype.incref = function() { this.ref++; console.log('image incref ' + this.id + ' ' + this.ref); };
 	Image.prototype.cliprepl = function(repl, clipr) {
 		this.clipr = clipr;
 		this.repl = repl;
@@ -148,10 +153,12 @@ function devdraw() {
 		Module.HEAPU32.set([clipr.min.x, clipr.min.y, clipr.max.x, clipr.max.y], (this.C>>2)+4);
 	}
 	Image.prototype.free = function() {
+		console.log('image decref ' + this.id + ' ' + (this.ref - 1)); 
+		if(this.ref <= 0) throw new Error('refcounting botch');
 		if(--this.ref > 0) return;
 		if(this.layer){
-			this.screen.free();
 			C.memldelete(this.C);
+			this.screen.free();
 		}else
 			C.freememimage(this.C);
 		delete this.C;
@@ -231,15 +238,38 @@ function devdraw() {
 				C.memltorearn(buf, w.length);
 		});
 	}
-	var display = new Image({
-		id: 0,
-		r: displayRect,
-		clipr: displayRect,
-		chan: 0x48281808,
-		fill: 0xFF,
-		screenid: 0,
-		repl: 0
-	});
+	var display;
+	var displayidx = 0;
+	function resize() {
+		w = document.body.clientWidth;
+		h = document.body.clientHeight;
+		canvas.width = w;
+		canvas.height = h;
+		displayRect.max.x = w;
+		displayRect.max.y = h;
+		if(display) display.free();
+		display = new Image({
+			id: 0,
+			r: displayRect,
+			clipr: displayRect,
+			chan: 0x48281808,
+			fill: 0xFF,
+			screenid: 0,
+			repl: 0
+		});
+		display.name = "screen.noborder." + displayidx++;
+		publicImages[display.name] = display;
+		imageData = ctx.createImageData(w, h);
+		mouseresize();
+	}
+	resize();
+	window.addEventListener('resize', resize);
+	
+	const winname = new File("winname", 0, dev);
+	winname.read = function(fid, count, offset) {
+		return display.name.substr(offset, count);
+	}
+	
 	function Font(img, n, ascent) {
 		img.font = this;
 		this.img = img;
@@ -296,12 +326,12 @@ function devdraw() {
 
 		var drawop = SoverD;
 		
-		var images = {0: display};
+		var images = {};
 		var myscreens = {};
 		var infoid = 0;
 
 		ctl.read = function(fid, count, offset){
-			let w = images[infoid];
+			let w = infoid == 0 ? display : images[infoid];
 			var str = [
 					num, w.id, 'r8g8b8a8', w.repl,
 					w.r.min.x, w.r.min.y, w.r.max.x, w.r.max.y,
@@ -318,7 +348,7 @@ function devdraw() {
 				if(m.id in allscreens) return new Error('screen id reused');
 				if(!(m.imageid in images)) return new Error('no such image');
 				if(!(m.fillid in images)) return new Error('no such image');
-				myscreens[m.id] = allscreens[m.id] = new Screen(images[m.imageid], images[m.fillid], m.public, num);
+				myscreens[m.id] = allscreens[m.id] = new Screen(m.id, images[m.imageid], images[m.fillid], m.public, num);
 				break;
 			case 'b':
 				if(m.id in images) return new Error('image id reused');
@@ -353,9 +383,9 @@ function devdraw() {
 			case 'F':
 				if(!(m.id in myscreens)) return new Error('no such image');
 				myscreens[m.id].free();
-				delete myscreens[m.id];
 				if(myscreens[m.id].owner == num)
 					delete allscreens[m.id];
+				delete myscreens[m.id];
 				break;
 			case 'i':
 				if(!(m.id in images)) return new Error('no such image');
@@ -383,7 +413,7 @@ function devdraw() {
 				if(!(m.id in images)) return new Error('no such image');
 				if(m.in){
 					publicImages[m.name] = images[m.id];
-					images[m.id].ref++;
+					images[m.id].incref();
 				}else{
 					publicImages[m.name].free();
 					delete publicImages[m.name];
@@ -395,7 +425,8 @@ function devdraw() {
 				if(m.id in images) return new Error('image id reused');
 				infoid = m.id;
 				images[m.id] = publicImages[m.name];
-				images[m.id].ref++;
+				images[m.id].incref();
+				images[m.id].id = m.id;
 				break;
 			case 'O':
 				drawop = m.op;
@@ -416,7 +447,7 @@ function devdraw() {
 				if(s.image.chan !== m.chan) return new Error('inconsistent chan');
 				if(s.owner !== num){
 					myscreens[m.id] = s;
-					s.ref++;
+					s.incref();
 				}
 				break;
 			case 't': {

@@ -252,7 +252,7 @@ function rcpu() {
 }
 
 function main() {
-	devdraw();
 	devcons();
+	devdraw();
 	rcpu();
 };
