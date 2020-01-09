@@ -1,6 +1,6 @@
 "use strict";
 
-var mouseresize;
+var mouseresize, conspaint;
 
 function devcons() {
 	const canvas = document.getElementById('canvas');
@@ -120,6 +120,7 @@ function devcons() {
 		}
 		py -= lh;
 	}
+	conspaint = redraw;
 	function writechar(c) {
 		function newline(){
 			if(py + lh >= bm){
