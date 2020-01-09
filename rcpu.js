@@ -254,5 +254,6 @@ function rcpu() {
 function main() {
 	devcons();
 	devdraw();
+	devaudio();
 	rcpu();
 };
