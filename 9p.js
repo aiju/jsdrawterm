@@ -242,16 +242,21 @@ function NineP(chan){
 			tag: msg.tag
 		};
 		this.responded = false;
+		this.flush = [];
 	}
 	Req.prototype.respond = function(ename) {
 		if(this.responded)
 			throw new Error("9P: request answered twice");
 		this.responded = true;
 		delete tags[this.tag];
+		let out;
 		if(ename === undefined || ename === null)
-			return sendMsg(this.ofcall);
+			out = sendMsg(this.ofcall);
 		else
-			return sendMsg({type: $Rerror, tag: this.tag, ename: ename.message});
+			out = sendMsg({type: $Rerror, tag: this.tag, ename: ename.message});
+		for(let i = 0; i < this.flush.length; i++)
+			out = out.then(this.flush[i]);
+		return out;
 	}
 	function newReq(m) {
 		if(m.tag in tags){
@@ -405,6 +410,13 @@ function NineP(chan){
 			throw new Error('stat should return error or undefined');
 		});	
 	}
+	function flush(req) {
+		let oldreq = tags[req.ifcall.oldtag];
+		if(oldreq !== undefined && oldreq.responded == 0)
+			oldreq.flush.push(() => req.respond());
+		else
+			return req.respond();
+	}
 	function srv() {
 		return recvMsg().then(m => {
 			//console.log('<- ', m);
@@ -428,7 +440,7 @@ function NineP(chan){
 			case $Tread: read(req); break;
 			case $Tstat: stat(req); break;
 			case $Twstat: wstat(req); break;
-			case $Tflush: break;
+			case $Tflush: flush(req); break;
 			default: botch();
 			}
 		}).then(srv);
