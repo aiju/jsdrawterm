@@ -193,4 +193,85 @@ function devcons() {
 	canvas.addEventListener('mousemove', mouse);
 	canvas.addEventListener('mouseup', mouse);
 	canvas.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+	
+	const devcursor = new File('cursor', 0, dev);
+	const cursorFmt = Struct(['x', u32, 'y', u32, 'clr', Bytes(32), 'set', Bytes(32)]);
+	const CURfmt = Struct([
+		'reserved', u16,
+		'img_type', u16,
+		'img_num', u16,
+		'width', u8,
+		'height', u8,
+		'colors', u8,
+		'reserved2', u8,
+		'hotspot_x', u16,
+		'hotspot_y', u16,
+		'size', u32,
+		'offset', u32,
+		'bmp_header_size', u32,
+		'bmp_width', u32,
+		'bmp_height', u32,
+		'bmp_planes', u16,
+		'bmp_bpp', u16,
+		'bmp_comp', u32,
+		'bmp_size', u32,
+		'bmp_hres', u32,
+		'bmp_vres', u32,
+		'bmp_colors', u32,
+		'bmp_important', u32,
+		'col0', u32,
+		'col1', u32,
+		'xor', Bytes(64),
+		'and', Bytes(64),
+	]);
+	var cursor = null;
+	devcursor.read = function(fid, count, offset){
+		if(cursor == null) return 0;
+		return cursor.slice(offset, offset+count);
+	}
+	devcursor.write = function(fid, data, offset){
+		if(data.length < 72){
+			canvas.style.cursor = '';
+			cursor = null;
+			return data.length;
+		}
+		cursor = unpack(cursorFmt, data);
+		var cur = {
+			reserved: 0,
+			img_type: 2,
+			img_num: 1,
+			width: 16,
+			height: 16,
+			colors: 2,
+			reserved2: 0,
+			hotspot_x: -cursor.x,
+			hotspot_y: -cursor.y,
+			size: 176,
+			offset: 22,
+			bmp_header_size: 40,
+			bmp_width: 16,
+			bmp_height: 32,
+			bmp_planes: 1,
+			bmp_bpp: 1,
+			bmp_comp: 0,
+			bmp_size: 32,
+			bmp_hres: 0,
+			bmp_vres: 0,
+			bmp_colors: 2,
+			bmp_important: 0,
+			col0: 0x00000000,
+			col1: 0xffffffff,
+			xor: new Uint8Array(64),
+			and: new Uint8Array(64)
+		};
+		for(var i=0; i < 16; i++){
+			cur.xor[4*i] = ~cursor.set[30-2*i];
+			cur.xor[4*i+1] = ~cursor.set[31-2*i];
+			cur.and[4*i] = ~(cursor.clr[30-2*i] | cursor.set[30-2*i]);
+			cur.and[4*i+1] = ~(cursor.clr[31-2*i] | cursor.set[31-2*i]); 
+		}
+		var data = btoa(String.fromCharCode.apply(null, pack(CURfmt, cur).data()));
+		canvas.style.cursor = 'url(data:image/x-icon;base64,' + data + '),auto';
+		return 72;
+	}
 }
