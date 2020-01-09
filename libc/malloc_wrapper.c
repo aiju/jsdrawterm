@@ -7,6 +7,8 @@
 #undef long
 #include <emscripten.h>
 
+#ifdef TRACE_MALLOC
+
 static char buf[65536];
 
 void *
@@ -27,3 +29,4 @@ free0(void *v)
 	EM_ASM(C.record_free($0), v);
 	return free(v);
 }
+#endif
