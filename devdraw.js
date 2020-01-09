@@ -11,8 +11,6 @@ function devdraw() {
 	
 	C.memimageinit();
 	
-	var publicImages = {};
-
 	const Char = {
 		get: (b,o) => String.fromCharCode(U8.get(b,o)),
 		put: (b,c,o) => U8.put(b,c.charCodeAt(0),o)
@@ -131,6 +129,7 @@ function devdraw() {
 			screen.incref();
 			this.layer = true;
 			this.screen = screen;
+			if(!this.screen.C || !this.screen.image.C || !this.screen.fill.C) throw new Error("dead screen walking");
 			if(m.repl) throw new Error("no repl on screen");
 			this.C = withRectangle(m.r, r => C.memlalloc0(screen.C, r, m.refresh == 0, m.color));
 			if(!this.C) throw new Error("memlalloc: " + errstr());
@@ -145,6 +144,18 @@ function devdraw() {
 		this.cliprepl(m.repl, m.clipr);
 	}
 	Image.prototype.incref = function() { this.ref++; console.log('image incref ' + this.id + ' ' + this.ref); };
+	Image.prototype.free = function() {
+		console.log('image decref ' + this.id + ' ' + (this.ref - 1)); 
+		if(this.ref <= 0) throw new Error('refcounting botch');
+		if(--this.ref > 0) return;
+		if(this.name !== undefined) throw new Error('freeing named image -- shouldn\'t happen');
+		if(this.layer){
+			C.memldelete(this.C);
+			this.screen.free();
+		}else
+			C.freememimage(this.C);
+		delete this.C;
+	}
 	Image.prototype.cliprepl = function(repl, clipr) {
 		this.clipr = clipr;
 		this.repl = repl;
@@ -153,17 +164,6 @@ function devdraw() {
 		else
 			C.memimageflags(this.C, 0, Frepl);
 		Module.HEAPU32.set([clipr.min.x, clipr.min.y, clipr.max.x, clipr.max.y], (this.C>>2)+4);
-	}
-	Image.prototype.free = function() {
-		console.log('image decref ' + this.id + ' ' + (this.ref - 1)); 
-		if(this.ref <= 0) throw new Error('refcounting botch');
-		if(--this.ref > 0) return;
-		if(this.layer){
-			C.memldelete(this.C);
-			this.screen.free();
-		}else
-			C.freememimage(this.C);
-		delete this.C;
 	}
 	Image.prototype.load = function(r, compressed, b) {
 		return withRectangle(r, Cr => {
@@ -260,14 +260,36 @@ function devdraw() {
 			repl: 0,
 			refresh: 0
 		});
-		display.name = "screen.noborder." + displayidx++;
-		publicImages[display.name] = display;
+		register("screen.noborder." + displayidx++, display);
 		imageData = ctx.createImageData(w, h);
 		mouseresize();
 	}
-	resize();
-	window.addEventListener('resize', resize);
+	let resizeTimer;
+	function resizeEvent(event) {
+		console.log(event);
+		if(resizeTimer)
+			clearTimeout(resizeTimer);
+		resizeTimer = setTimeout(resize, 250);
+	}
 	
+	var publicImages = {};
+	function register(name, img) {
+		if(name in publicImages) return new Error("name used");
+		if(img.name !== undefined) return new Error("image already has a name");
+		console.log("register " + name);
+		img.incref();
+		img.name = name;
+		publicImages[name] = img; 
+	}
+	function deregister(name, img) {
+		if(!(name in publicImages)) return new Error("no such name");
+		if(publicImages[name] !== img) return new Error("wrong name");
+		console.log("deregister " + name);
+		delete publicImages[name];
+		delete img.name;
+		img.decref();
+	}
+
 	const winname = new File("winname", 0, dev);
 	winname.read = function(fid, count, offset) {
 		return display.name.substr(offset, count);
@@ -414,22 +436,18 @@ function devdraw() {
 				break;
 			case 'N': {
 				if(!(m.id in images)) return new Error('no such image');
-				if(m.in){
-					publicImages[m.name] = images[m.id];
-					images[m.id].incref();
-				}else{
-					publicImages[m.name].free();
-					delete publicImages[m.name];
-				}
-				break;
+				if(m.in)
+					return register(m.name, images[m.id]);
+				else
+					return deregister(m.name, images[m.id]);
 			}
 			case 'n':
 				if(!(m.name in publicImages)) return new Error('no such image');
 				if(m.id in images) return new Error('image id reused');
 				infoid = m.id;
 				images[m.id] = publicImages[m.name];
-				images[m.id].incref();
 				images[m.id].id = m.id;
+				images[m.id].incref();
 				break;
 			case 'O':
 				drawop = m.op;
@@ -500,4 +518,7 @@ function devdraw() {
 			}
 		};
 	};
+
+	resize();
+	window.addEventListener('resize', resizeEvent);
 }
