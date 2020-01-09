@@ -243,8 +243,8 @@ function devdraw() {
 	var display;
 	var displayidx = 0;
 	function resize() {
-		w = document.body.clientWidth;
-		h = document.body.clientHeight;
+		w = window.innerWidth;
+		h = window.innerHeight;
 		canvas.width = w;
 		canvas.height = h;
 		displayRect.max.x = w;
