@@ -30,6 +30,11 @@
 #include <pthread.h>
 #endif
 
+#define malloc malloc0
+#define free free0
+void *malloc(size_t);
+void free(void *);
+
 typedef long long		p9_vlong;
 typedef unsigned long long p9_uvlong;
 typedef uintptr_t uintptr;

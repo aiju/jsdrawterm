@@ -3,6 +3,7 @@ include ../Make.config
 LIB=libc.a
 
 OFILES=\
+	malloc_wrapper.$O\
 	u16.$O\
 	mallocz.$O\
 	u32.$O\

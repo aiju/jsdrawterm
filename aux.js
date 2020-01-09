@@ -2,6 +2,36 @@
 
 var C;
 
+var mallocs = {};
+function record_malloc(v, n, stack){
+	mallocs[v] = {n: n, stack: stack.split('\n').splice(1)};
+}
+function record_free(v){
+	delete mallocs[v];
+}
+function malloc_info(topdown){
+	function subdiv(x){
+		var t = {me: [], sub: 0};
+		for(var a in x){
+			let m = x[a];
+			t.sub += m.n;
+			if(m.stack.length == 0)
+				t.me.push(m.n);
+			else{
+				let h = m.stack[topdown ? m.stack.length - 1 : 0];
+				if(!(h in t)) t[h] = {};
+				t[h][a] = {n: m.n, stack: topdown ? m.stack.slice(0, m.stack.length - 1) : m.stack.slice(1)};
+			}
+		}
+		for(var a in t){
+			if(a != 'me' && a != 'sub')
+				t[a] = subdiv(t[a]);
+		}
+		return t;
+	}
+	return subdiv(mallocs);
+}
+
 Module['onRuntimeInitialized'] = () => {
 	C = {
 		mallocz: Module.cwrap('mallocz', 'number', ['number', 'number']),
@@ -42,6 +72,8 @@ Module['onRuntimeInitialized'] = () => {
 		memfillpoly: Module.cwrap('memfillpoly', null, ['number', 'number', 'number', 'number', 'number', 'number', 'number']),
 		memltofrontn: Module.cwrap('memltofrontn', null, ['number', 'number']),
 		memltorearn: Module.cwrap('memltofrontn', null, ['number', 'number']),
+		record_malloc: record_malloc,
+		record_free: record_free,
 	};
 	main();
 };
