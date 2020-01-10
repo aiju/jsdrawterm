@@ -1,3 +1,4 @@
-secret.js
 *.o
 *.a
+blob.js
+blob.wasm

@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <title>drawterm</title>
+<script src="config.js" type="text/javascript"></script>
 <script src="blob.js" type="text/javascript"></script>
-<script src="secret.js" type="text/javascript"></script>
 <script src="aux.js" type="text/javascript"></script>
 <script src="rcpu.js" type="text/javascript"></script>
 <script src="tls.js" type="text/javascript"></script>
@@ -20,10 +20,64 @@
 	}
 	canvas {
 		margin: 0;
+		display: none;
+	}
+	#thegrey {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		flex-direction: row;
+		margin: 0;
+		width: 100%;
+		height: 100%;
+		background: #777777;
+	}
+	* {
+		font-size: 20pt;
+		font-family: sans-serif;
+	}
+	#loading {
+		border: 4px solid #55aaaa;
+		background: white;
+		padding: 1cm;
+		display: flex;
+		flex-direction: column;
+	}
+	#loading > div {
+		margin-top: 1em;
+		display: flex;
+		flex-direction: row;
+		justify-content: space-between;
+	}
+	#loading span { font-size: 24pt; }
+	#login {
+		border: 4px solid #55aaaa;
+		background: white;
+		padding: 1cm;
+		display: none;
+	}
+	#login input {
+		margin-top: 0.5em;
+		margin-bottom: 0.5em;
+	}
+	#error {
+		display: none;
 	}
 </style>
 </head>
 <body>
+<div id="thegrey">
+<div id="loading">
+<img src="loading.jpg" alt="ROB">
+<div><span>L</span><span>O</span><span>A</span><span>D</span><span>I</span><span>N</span><span>G</span></div>
+</div>
+<form id="login" onsubmit="go(); return false">
+<span id="error"></span>
+<input type="text" id="user" placeholder="User name">
+<input type="password" id="password" placeholder="Password">
+<input type="submit" value="Connect">
+</form>
+</div>
 <canvas id='canvas' width="1024" height="768">
 </canvas>
 </body>

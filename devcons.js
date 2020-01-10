@@ -52,6 +52,7 @@ function devcons() {
 			return null;
 	}
 	document.addEventListener('keydown', function(event){
+		if(event.key === undefined) return;
 		let m = keymap(event.key);
 		if(m === null) return;
 		if(event.ctrlKey && event.shiftKey) return;
@@ -59,6 +60,7 @@ function devcons() {
 		event.preventDefault();
 	});
 	document.addEventListener('keyup', function(event){
+		if(event.key === undefined) return;
 		let m = keymap(event.key);
 		if(m === null) return;
 		if(event.ctrlKey && event.shiftKey) return;

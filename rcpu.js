@@ -124,7 +124,7 @@ function getastickets(authkey, tr)
 {
 	return withBufP(PAKYLEN, (ybuf, ybuf_array) =>
 	withBufP(PAKPRIVSZ, priv => {
-		return dial("ws://localhost:1235").then(chan => {
+		return dial(auth_url).then(chan => {
 			tr.type = AuthPAK;
 			return chan.write(pack(Ticketreq, tr).data())
 			.then(() => {
@@ -161,8 +161,8 @@ function dp9ik(chan, dom) {
 		.then(() => chan.read(b=>Ticketreq.len))
 		.then(b => {
 			tr = unpack(Ticketreq, b);
-			tr.hostid = 'glenda';
-			tr.uid = 'glenda';
+			tr.hostid = user;
+			tr.uid = user;
 			C.passtokey(authkey, password);
 			C.authpak_hash(authkey, tr.uid);
 			return getastickets(authkey, tr);
@@ -231,7 +231,7 @@ function p9any(chan) {
 	}).then(() => dp9ik(chan, dom));
 }
 
-function rcpu() {
+function rcpu(failure) {
 	const script = 
 "syscall fversion 0 65536 buf 256 >/dev/null >[2=1]\n" + 
 "mount -nc /fd/0 /mnt/term || exit\n" + 
@@ -242,18 +242,52 @@ function rcpu() {
 "}\n" + 
 "</dev/cons >/dev/cons >[2=1] service=cpu rc -li\n" + 
 "echo -n hangup >/proc/$pid/notepg\n";
-	var chan;
 	
-	return dial("ws://localhost:1234")
-	.then(rawchan => p9any(rawchan).then(ai => tlsClient(rawchan, ai.secret)))
-	.then(chan_ => chan = chan_)
-	.then(() => chan.write(new TextEncoder("utf-8").encode(script.length + "\n" + script)))
-	.then(() => NineP(chan));
+	return dial(rcpu_url)
+	.then(rawchan => p9any(rawchan).then(ai => tlsClient(rawchan, ai.secret)).catch(failure))
+	.then(chan => {
+		if(chan)
+			return chan.write(new TextEncoder("utf-8").encode(script.length + "\n" + script))
+			.then(() => chan);
+	});
 }
 
 function main() {
-	devcons();
-	devdraw();
-	devaudio();
-	rcpu();
-};
+	if(user === undefined || user === null || password === undefined || password === null){
+		document.getElementById('loading').style.display = 'none';
+		document.getElementById('login').style.display = 'grid';
+		if(user !== undefined){
+			document.getElementById('user').value = user;
+			document.getElementById('password').focus();
+		}else
+			document.getElementById('user').focus();
+	}else
+		go(true);
+}
+
+function go(no_ui) {
+	if(!no_ui){
+		user = document.getElementById('user').value;
+		password = document.getElementById('password').value;
+	}
+	document.getElementById('login').style.display = 'none';
+	document.getElementById('loading').style.display = '';
+	rcpu(e => {
+		document.getElementById('loading').style.display = 'none';
+		document.getElementById('login').style.display = 'grid';
+		document.getElementById('error').style.display = 'block';
+		document.getElementById('error').innerHTML = e.toString();
+		password = undefined;
+		main();
+	}).then(chan => {
+		if(chan){
+			document.getElementById('thegrey').style.display = 'none';
+			document.getElementById('loading').style.display = 'none';
+			document.getElementById('canvas').style.display = 'block';
+			devcons();
+			devdraw();
+			devaudio();
+			return NineP(chan);
+		}
+	});
+}
